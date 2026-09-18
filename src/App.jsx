@@ -7,8 +7,11 @@ import SaveCard from "./components/SaveCard.jsx";
 import AuthCard from "./components/AuthCard.jsx";
 import SnapshotCard from "./components/SnapshotCard.jsx";
 import SharePage from "./components/SharePage.jsx";
+import ApprovalGate from "./components/ApprovalGate.jsx";
+import AdminPanel from "./components/AdminPanel.jsx";
 import { usePlaces } from "./hooks/usePlaces.js";
 import { useAuth } from "./hooks/useAuth.js";
+import { resolveAppRoute } from "./services/approval.js";
 import {
     forgetSessionFileHandle,
     getSessionFileHandle,
@@ -18,12 +21,19 @@ import {
 } from "./services/fileSync.js";
 
 export default function App() {
-    const shareToken = new URLSearchParams(window.location.search).get("share");
-    return shareToken ? <SharePage token={shareToken} /> : <ManagementApp />;
+    // ai coding：公开分享路由在任何 Auth hook 挂载前分流，访客不会触发登录、profile 或管理员查询。
+    const route = resolveAppRoute(window.location.search);
+    return route.kind === "public-share" ? <SharePage token={route.token} /> : <ManagementApp />;
 }
 
 function ManagementApp() {
     const auth = useAuth();
+    const formal = auth.session?.user && !auth.session.user.is_anonymous;
+    if (formal && (auth.access.ownerId !== auth.session.user.id || auth.access.loading || !auth.access.allowed)) return <ApprovalGate auth={auth} />;
+    return <ApprovedManagementApp auth={auth} />;
+}
+
+function ApprovedManagementApp({ auth }) {
     const {
         places,
         types,
@@ -341,6 +351,8 @@ function ManagementApp() {
                 <AuthCard session={auth.session} auth={auth} placeCount={places.features.length} onExport={exportPlaces} />
             </header>
             <main>
+                {/* ai coding：公开快照跟随地图主列排列，避免继续占用地点维护侧栏。 */}
+                <div className="map-column">
                 <section className="map-panel" aria-labelledby="map-title">
                     <div className="panel-heading">
                         <h2 id="map-title">地图视图</h2>
@@ -401,7 +413,11 @@ function ManagementApp() {
                         </div>
                     )}
                 </section>
+                    {/* ai coding：owner 切换时同步重建卡片，首帧不复用上一账号的本地 UI 状态。 */}
+                    <SnapshotCard key={auth.session?.user?.id ?? "no-owner"} ownerId={auth.session?.user?.id} places={places} cloud={cloud} />
+                </div>
                 <aside className="info-panel" aria-label="地点维护面板">
+                    {auth.access.isAdmin && <AdminPanel key={auth.access.ownerId} ownerId={auth.access.ownerId} />}
                     <section
                         className="place-card"
                         aria-labelledby="places-title"
@@ -494,8 +510,6 @@ function ManagementApp() {
                         onSync={syncPlaces}
                         onExport={exportPlaces}
                     />
-                    {/* ai coding：owner 切换时同步重建卡片，首帧不复用上一账号的本地 UI 状态。 */}
-                    <SnapshotCard key={auth.session?.user?.id ?? "no-owner"} ownerId={auth.session?.user?.id} places={places} cloud={cloud} />
                 </aside>
             </main>
             {toast && (

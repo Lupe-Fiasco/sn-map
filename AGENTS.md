@@ -33,6 +33,7 @@ npm run build:map-data
 - 首次“同步到本地”选择文件后，必须在用户激活仍有效时立即 `createWritable()`，随后确认并覆盖写入点击时的完整快照；绝不读取所选文件覆盖当前数据。成功写入才更新同步基线。文件句柄仅保留在当前页面会话。
 - 导出始终下载当前完整 `places.geojson`。暂不提供恢复初始文件功能。
 - 正式邮箱账号和匿名 Supabase session 均由浏览器持久化；注册/登录不自动迁移匿名 owner 数据。清空浏览器站点存储会创建新的匿名用户，原匿名用户的数据不会自动迁移。
+- 正式邮箱账号须先确认邮箱、再由 `admin_users` 中的管理员人工批准；pending/rejected 不得进入管理端，且 places/map_snapshots owner RLS 同步执行审核门禁。匿名兼容账号继续可用。管理员只通过数据库 user_id bootstrap，禁止在代码或 migration 写入管理员邮箱。
 - `map_snapshots` 保存用户发布时的完整正式 FeatureCollection；私有地点编辑不自动更新快照。公开分享页只读 `is_public=true` 数据，不初始化匿名登录，不展示任何管理操作；本地文件仍只是当前私有地点的手动镜像。
 
 <!-- ai coding -->

@@ -6,6 +6,7 @@ const migrationUrl = new URL("../supabase/migrations/202609170002_upgrade_places
 const createMigrationUrl = new URL("../supabase/migrations/202609170001_create_places.sql", import.meta.url);
 const snapshotsMigrationUrl = new URL("../supabase/migrations/202609170003_create_map_snapshots.sql", import.meta.url);
 const secureSnapshotsMigrationUrl = new URL("../supabase/migrations/202609170004_secure_public_snapshot_access.sql", import.meta.url);
+const approvalMigrationUrl = new URL("../supabase/migrations/202609170005_create_profiles_approval.sql", import.meta.url);
 
 test("places upgrade migration protects ownership and installs the owner-scoped conflict key", async () => {
   const [createSql, sql] = await Promise.all([
@@ -60,5 +61,24 @@ test("secure snapshot migration removes direct public reads and rebuilds an allo
   assert.match(sql, /grant execute on function public\.get_public_map_snapshot\(text\) to anon, authenticated/);
   assert.doesNotMatch(sql, /grant execute[^;]+service_role/i);
   assert.doesNotMatch(sql, /grant select[^;]+anon/i);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("approval migration installs profiles, non-enumerable admins, trigger, and owner approval RLS", async () => {
+  const sql = await readFile(approvalMigrationUrl, "utf8");
+  // ai coding：静态守卫确保审核只影响管理端 owner policy，公开快照 RPC 不被替换或收紧。
+  assert.match(sql, /create table if not exists public\.profiles/);
+  assert.match(sql, /approval_status in \('pending', 'approved', 'rejected'\)/);
+  assert.match(sql, /create table if not exists public\.admin_users/);
+  assert.match(sql, /create trigger on_auth_user_created_profile after insert on auth\.users/);
+  assert.match(sql, /insert into public\.profiles[\s\S]*from auth\.users[\s\S]*on conflict \(id\) do nothing/);
+  assert.match(sql, /create or replace function public\.is_admin\(\)[\s\S]*security definer[\s\S]*set search_path = ''/);
+  assert.match(sql, /create or replace function public\.is_approved\(\)[\s\S]*is_anonymous = true/);
+  assert.match(sql, /revoke all on table public\.profiles, public\.admin_users from public, anon, authenticated/);
+  assert.match(sql, /grant update \(approval_status\) on table public\.profiles to authenticated/);
+  assert.match(sql, /profiles_select_self_or_admin[\s\S]*public\.is_admin\(\)/);
+  assert.match(sql, /places_select_own[\s\S]*public\.is_approved\(\)/);
+  assert.match(sql, /map_snapshots_update_own[\s\S]*public\.is_approved\(\)/);
+  assert.doesNotMatch(sql, /get_public_map_snapshot|map_snapshots_select_public/);
   assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
 });

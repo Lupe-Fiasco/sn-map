@@ -11,7 +11,9 @@ h1, h2, p { margin-top: 0; } h1 { margin-bottom: 8px; font-size: clamp(1.65rem, 
 .intro { max-width: 680px; margin-bottom: 0; color: #60716d; line-height: 1.7; }
 .eyebrow, .section-label { margin-bottom: 8px; color: #16785f; font-size: .72rem; font-weight: 750; letter-spacing: .13em; text-transform: uppercase; }
 main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; }
-.map-panel, .status-card, .place-card, .data-card, .auth-card, .snapshot-card { overflow: hidden; border: 1px solid #dbe3dd; border-radius: 14px; background: #fff; box-shadow: 0 8px 28px rgba(35,66,56,.055); }
+/* ai coding：地图与公开快照组成可收缩的主内容列，窄桌面下不撑开页面网格。 */
+.map-column { display: flex; min-width: 0; flex-direction: column; gap: 18px; }
+.map-panel, .status-card, .place-card, .data-card, .auth-card, .snapshot-card, .admin-card, .approval-card { overflow: hidden; border: 1px solid #dbe3dd; border-radius: 14px; background: #fff; box-shadow: 0 8px 28px rgba(35,66,56,.055); }
 .place-card { position: relative; z-index: 2; overflow: visible; }
 .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 82px; padding: 18px 20px; border-bottom: 1px solid #dbe3dd; }
 .map-actions { display: flex; align-items: center; gap: 8px; }
@@ -37,7 +39,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; }
 .polygon-edit-vertex-icon:focus-visible { outline: none; } .polygon-edit-vertex-icon:focus-visible .polygon-edit-vertex { outline: 3px solid #ffd166; outline-offset: 3px; box-shadow: 0 1px 5px rgba(25,51,46,.55), 0 0 0 2px #19332e; }
 .polygon-edit-edge { cursor: copy; }
 .leaflet-container.editing-area { cursor: default; }
-.info-panel { display: flex; flex-direction: column; gap: 18px; } .status-card, .place-card, .data-card, .snapshot-card { padding: 20px; } .section-heading, .editor-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.info-panel { display: flex; flex-direction: column; gap: 18px; } .status-card, .place-card, .data-card, .snapshot-card, .admin-card { padding: 20px; } .section-heading, .editor-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .count-badge { min-width: 26px; padding: 4px 8px; border-radius: 999px; color: #16785f; background: #e4f1eb; text-align: center; font-size: .75rem; font-weight: 700; }
 .filters { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; margin-top: 16px; }
 input, select, textarea { width: 100%; min-height: 38px; padding: 8px 10px; border: 1px solid #cbd6cf; border-radius: 7px; color: #19332e; background: #fff; font: inherit; } select { padding-right: 34px; } textarea { resize: vertical; }
@@ -94,6 +96,25 @@ footer { display: flex; justify-content: space-between; gap: 20px; padding: 20px
 .public-place-list button[aria-pressed="true"] { background: #eaf4ef; }
 .share-message { display: block; min-height: 420px; padding: 60px; border: 1px solid #dbe3dd; border-radius: 14px; background: #fff; text-align: center; }
 .share-message.error { color: #812e28; }
+/* ai coding：审核阻断页与管理员列表沿用项目的卡片、状态色和紧凑桌面密度。 */
+.approval-main { display: grid; min-height: 520px; place-items: start center; padding-top: 72px; }
+.approval-header { align-items: center; }
+.approval-card { width: min(560px, 100%); padding: 34px; text-align: center; }
+.approval-card h2 { margin-top: 4px; font-size: 1.35rem; }
+.approval-card > p:not(.section-label) { max-width: 440px; margin: 14px auto 0; color: #60716d; font-size: .88rem; line-height: 1.7; }
+.approval-mark { display: grid; width: 52px; height: 52px; margin: 0 auto 18px; place-items: center; border-radius: 50%; color: #8a5a1c; background: #fff3dc; font-size: 1.25rem; font-weight: 800; }
+.approval-mark.rejected { color: #9d352e; background: #ffebe8; }
+.approval-actions { display: flex; justify-content: center; gap: 9px; margin-top: 24px; }
+.approval-list { margin: 14px 0 0; padding: 0; list-style: none; }
+.approval-list > li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px 12px; padding: 13px 0; border-top: 1px solid #dbe3dd; }
+.approval-list strong, .approval-list span { display: block; overflow-wrap: anywhere; }
+.approval-list strong { font-size: .8rem; }
+.approval-list div > span { margin-top: 4px; color: #60716d; font-size: .68rem; }
+.approval-badge { align-self: start; padding: 3px 7px; border-radius: 999px; color: #704a19; background: #fff1d9; font-size: .65rem; font-weight: 750; }
+.approval-badge.approved { color: #0e5f4b; background: #dff1e8; }
+.approval-badge.rejected { color: #812e28; background: #ffe7e4; }
+.approval-row-actions { display: flex; grid-column: 1 / -1; gap: 7px; }
+.approval-row-actions .button { min-height: 31px; padding-block: 4px; font-size: .73rem; }
 @keyframes pulse { 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .status-dot.loading, .cloud-status.connecting .cloud-status-dot { animation: none; } }
 @media (max-width: 1100px) { .site-header { align-items: stretch; flex-direction: column; } .auth-card { width: 100%; flex-basis: auto; } }

@@ -25,7 +25,7 @@ export async function registerWithPassword(client, email, password) {
   if (signOut.error) throw new Error(`注册准备失败：${signOut.error.message}`);
   const { data, error } = await client.auth.signUp({ email: email.trim(), password });
   if (error || !data.user) throw new Error(`注册失败：${error?.message || "未返回用户"}`);
-  return { session: data.session ?? null, confirmationRequired: !data.session };
+  return { session: data.session ?? null, confirmationRequired: !data.session, registered: true };
 }
 
 export async function signOutToAnonymous(client) {
