@@ -35,6 +35,15 @@ npm run build:map-data
 - 正式邮箱账号和匿名 Supabase session 均由浏览器持久化；注册/登录不自动迁移匿名 owner 数据。清空浏览器站点存储会创建新的匿名用户，原匿名用户的数据不会自动迁移。
 - `map_snapshots` 保存用户发布时的完整正式 FeatureCollection；私有地点编辑不自动更新快照。公开分享页只读 `is_public=true` 数据，不初始化匿名登录，不展示任何管理操作；本地文件仍只是当前私有地点的手动镜像。
 
+<!-- ai coding -->
+## 部署镜像同步
+
+- 主开发项目是 `C:\Users\Administrator\Desktop\demo\sn-map-react`（GitLab）；部署镜像是 `C:\Users\Administrator\Desktop\sn-map-public`（GitHub/Vercel）。
+- 每次业务代码、配置、静态数据或文档改动，默认同时将本次相关文件同步到部署镜像。
+- 同步前先分别检查两个目录的 `git status` 和 `git diff`，避免覆盖部署镜像项目已有的独立改动；只同步本次相关文件。
+- 不复制或覆盖两边各自的 `.git`、`.env.local`、`node_modules`、`dist` 和部署专属配置；除非用户明确要求，不自动执行 `commit` 或 `push`。
+- 同步完成后，分别验证两个项目必要的测试和构建状态。
+
 ## 验证约定
 
 默认先运行 `npm test` 和 `npm run build`，并做静态检查。默认不使用 chrome-devtools；仅当存在无法由代码、测试或构建判断的用户可见问题时再使用浏览器工具。桌面 Web 是当前验证范围。

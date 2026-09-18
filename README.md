@@ -15,7 +15,7 @@ npm run build
 
 1. 复制 `.env.example` 为 `.env.local` 并填写项目 URL 与 publishable key。
 2. 在 Supabase 控制台启用 Authentication 的邮箱密码登录；如需保留兼容模式，同时启用 Anonymous Sign-Ins。按部署域名配置邮箱确认跳转 URL。
-3. 远程已执行 `202609170001_create_places.sql` 与 `202609170002_upgrade_places_owner_primary_key.sql` 时，**只需执行** `supabase/migrations/202609170003_create_map_snapshots.sql`。003 可重复安全执行；本仓库仅生成 migration，不会自动执行或修改远程数据库。
+3. 按文件名顺序执行 `supabase/migrations/` 中尚未应用的 migration。已执行 003 的环境必须继续执行 `202609170004_secure_public_snapshot_access.sql`；本仓库不会自动执行或修改远程数据库。
 
 管理页支持 Supabase 邮箱+密码注册、登录和退出，并保留匿名 session 兼容。`places` 以 `(owner_id, id)` 为联合主键，客户端显式按当前 `owner_id` 查询，RLS 再次强制只能读写自己的地点。注册/登录不会猜测、合并或覆盖匿名 owner 的数据；当前版本不自动迁移匿名地点，请在切换前导出备份。清空站点存储会丢失匿名 session 并创建新匿名用户，旧匿名数据不会自动迁移或找回。
 
@@ -23,7 +23,9 @@ npm run build
 
 ## 公开只读快照
 
-管理端可把当前已保存的完整地点集合发布为一个公开快照，并复制 `?share=<token>` 链接。快照是发布时独立保存的 JSON，之后编辑私有地点不会改变它；再次发布才更新，取消公开后原链接无法读取。分享页无需登录，不创建匿名会话，只能读取 `is_public = true` 的快照，并隐藏全部维护、文件同步和发布功能。若尚未执行 migration 003，管理端会显示初始化提示而不会崩溃。客户端只使用 publishable key，禁止配置或暴露 `service_role`。
+管理端可把当前已保存的地点集合按“仅地图 / 基础信息 / 详细信息”预设发布，并单独调整类型、经纬度、备注是否公开。名称与 geometry 是公开地图必需内容；快照只写入明确选择的属性，不包含 owner、source、会话或其他私有字段。快照是发布时独立保存的 JSON，之后编辑私有地点不会改变它；再次发布才更新，取消公开后原链接无法读取。分享页只通过数据库安全 RPC 获取服务端白名单重建的数据，不直接读取快照表。
+
+**只有执行 004 migration 后才允许启用公开分享。** 004 会把旧行按“仅地图（名称 + geometry）”处理并撤销访客对表的直接读取；旧公开快照仍需在管理端重新发布或取消公开，才能明确应用新的公开字段设置。分享页无需登录、不创建匿名会话，并隐藏全部维护、文件同步和发布功能。客户端只使用 publishable key，禁止配置或暴露 `service_role`。
 
 ### 旧版 places 手动升级
 

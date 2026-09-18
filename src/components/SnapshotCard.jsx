@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
     fetchOwnerSnapshot,
     publishSnapshot,
+    SNAPSHOT_PRESETS,
     shareTokenForOwner,
+    snapshotDisclosure,
     snapshotForOwner,
     unpublishSnapshot,
 } from "../services/mapSnapshots.js";
@@ -16,6 +18,17 @@ import {
 import { supabase } from "../services/supabaseClient.js";
 
 const DEFAULT_TITLE = "睢宁地点地图";
+const PRESET_OPTIONS = [
+    ["map", "仅地图", "名称 + 地图位置或区域形状"],
+    ["basic", "基础信息", "仅地图 + 地点类型 + 经纬度"],
+    ["detailed", "详细信息", "基础信息 + 备注"],
+];
+
+function matchingPreset(fields) {
+    return Object.entries(SNAPSHOT_PRESETS).find(([, candidate]) =>
+        Object.keys(candidate).every((field) => candidate[field] === fields[field]),
+    )?.[0] ?? "custom";
+}
 
 function shareUrl(token) {
     const url = new URL(window.location.href);
@@ -30,6 +43,8 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
     const [status, setStatus] = useState("");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
+    const [preset, setPreset] = useState("map");
+    const [fields, setFields] = useState(SNAPSHOT_PRESETS.map);
     const ownerGenerationRef = useRef(createOwnerGeneration(ownerId ?? null));
     // ai coding：render 时立即使前一账号及更早快照请求失效，所有完成回调均须通过同一 guard。
     updateOwnerGeneration(ownerGenerationRef.current, ownerId ?? null);
@@ -48,6 +63,8 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
         setStatus("");
         setError("");
         setBusy(false);
+        setPreset("map");
+        setFields(SNAPSHOT_PRESETS.map);
         if (!ownerId || !supabase) return undefined;
         fetchOwnerSnapshot(supabase, ownerId)
             .then((row) => {
@@ -63,6 +80,11 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
                     return;
                 setSnapshot(ownerSnapshot);
                 setTitle(ownerSnapshot.title);
+                const publishedFields = snapshotDisclosure(ownerSnapshot.snapshot);
+                if (publishedFields) {
+                    setFields(publishedFields);
+                    setPreset(matchingPreset(publishedFields));
+                }
             })
             .catch((reason) => {
                 if (
@@ -84,9 +106,9 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
         const operation = captureOwnerGeneration(ownerGenerationRef.current);
         setBusy(true);
         setError("");
-        setStatus("正在发布当前完整地点集合…");
+        setStatus("正在生成并发布脱敏快照…");
         try {
-            const row = await publishSnapshot(supabase, ownerId, title, places);
+            const row = await publishSnapshot(supabase, ownerId, title, places, fields);
             if (
                 !isOwnerGenerationCurrent(ownerGenerationRef.current, operation)
             )
@@ -95,7 +117,7 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
             if (!ownerSnapshot) return;
             setSnapshot(ownerSnapshot);
             setTitle(ownerSnapshot.title);
-            setStatus(`发布成功，共 ${places.features.length} 个地点。`);
+            setStatus(`发布成功，共 ${places.features.length} 个地点；未选择的属性未写入公开快照。`);
         } catch (reason) {
             if (
                 isOwnerGenerationCurrent(ownerGenerationRef.current, operation)
@@ -157,6 +179,14 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
         cloud.state !== "connected" ||
         cloud.ownerId !== ownerId ||
         cloud.saving;
+    const choosePreset = (value) => {
+        setPreset(value);
+        setFields(SNAPSHOT_PRESETS[value]);
+    };
+    const toggleField = (field) => {
+        setPreset("custom");
+        setFields((current) => ({ ...current, [field]: !current[field] }));
+    };
     return (
         <section className="snapshot-card" aria-labelledby="snapshot-title">
             <p className="section-label">公开只读快照</p>
@@ -179,10 +209,34 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
                     disabled={busy}
                 />
             </label>
+            <fieldset className="snapshot-options" disabled={busy}>
+                <legend>公开展示级别</legend>
+                <div className="snapshot-presets">
+                    {PRESET_OPTIONS.map(([value, label, help]) => (
+                        <label key={value}>
+                            <input type="radio" name="snapshot-preset" checked={preset === value} onChange={() => choosePreset(value)} />
+                            <span><b>{label}</b><small>{help}</small></span>
+                        </label>
+                    ))}
+                </div>
+                <div className="snapshot-fields" aria-label="可调整的公开字段">
+                    {[["type", "类型"], ["coordinates", "经纬度"], ["description", "备注"]].map(([field, label]) => (
+                        <label key={field}><input type="checkbox" checked={fields[field]} onChange={() => toggleField(field)} />{label}</label>
+                    ))}
+                </div>
+                <p className="form-help">名称和 Point 位置或 Polygon 完整形状始终公开；仅勾选字段会写入公开快照。</p>
+            </fieldset>
             <p className="file-status">
                 发布会复制此刻的正式地点集合；待定点、编辑草稿及 localStorage
                 草稿不会进入快照，后续编辑也不会自动更新。
             </p>
+            {currentSnapshot && (
+                <p className="snapshot-warning">
+                    {snapshotDisclosure(currentSnapshot.snapshot)
+                        ? "当前公开内容以最后一次发布时选择的展示范围为准；修改选项后需更新公开快照。"
+                        : "这是历史快照，无法确认其脱敏范围。请重新发布以应用展示范围；如不再公开，可先取消公开。"}
+                </p>
+            )}
             {currentSnapshot?.is_public && (
                 <label className="snapshot-label">
                     分享链接

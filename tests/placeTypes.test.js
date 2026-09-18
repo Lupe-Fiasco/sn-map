@@ -37,9 +37,10 @@ test("every configured type passes the existing Point and Polygon validation cha
 
 test("seed places use the reviewed types for exact ids and names", async () => {
   const places = await readJson("../public/data/places.geojson");
+  // ai coding：按已审核的地点语义精确锁定种子类型，商业综合体与商业街区使用各自稳定配置 id。
   const expected = new Map([
     ["735fa0e5-2da3-4af7-ba91-213ee5709c9c", ["兴美城市广场", "shopping-mall"]],
-    ["f22e59ff-3142-46a2-b02d-b485c1956871", ["万象天地", "shopping-mall"]],
+    ["f22e59ff-3142-46a2-b02d-b485c1956871", ["万象天地", "commercial-district"]],
     ["8539c6ca-44a6-490f-9042-cfa18d0c182d", ["五星电器", "brand-store"]],
     ["e1379815-7b2d-4813-8d1d-2d4f4bae3c35", ["中国城", "commercial-district"]],
     ["eab50dda-aebd-40f8-91be-7d8812cac1a8", ["柳琴剧团", "cultural-venue"]],
