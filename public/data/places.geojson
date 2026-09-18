@@ -1,0 +1,618 @@
+{
+  "type": "FeatureCollection",
+  "name": "user-maintained-places",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "5d699f0c-720d-4683-b02f-e4bf7cd43494",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.936344,
+          33.912704
+        ]
+      },
+      "properties": {
+        "id": "5d699f0c-720d-4683-b02f-e4bf7cd43494",
+        "name": "云河公园",
+        "type": "park",
+        "phone": "",
+        "source": "user",
+        "address": "永康路1号",
+        "latitude": 33.912704,
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "longitude": 117.936344,
+        "updatedAt": "2026-09-18T03:21:54.094132+00:00",
+        "description": "水秀天桥、荷花池、喷泉、国旗"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "4464092d-012f-44bf-a98f-357fcfaf6f4c",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.936859,
+          33.909687
+        ]
+      },
+      "properties": {
+        "id": "4464092d-012f-44bf-a98f-357fcfaf6f4c",
+        "name": "红叶小区",
+        "type": "residential",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "updatedAt": "2026-09-18T01:39:26.748847+00:00",
+        "description": "陈少爷HOME",
+        "longitude": 117.936859,
+        "latitude": 33.909687
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "49576ce6-11bc-497d-91ee-a7b9fba6686b",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.940893,
+          33.913533
+        ]
+      },
+      "properties": {
+        "id": "49576ce6-11bc-497d-91ee-a7b9fba6686b",
+        "name": "城市景苑住宅区",
+        "type": "residential",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "updatedAt": "2026-09-18T01:39:26.748847+00:00",
+        "description": "雷帝HOME",
+        "longitude": 117.940893,
+        "latitude": 33.913533
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "a6aafbbd-b907-442a-94dd-b58cce1925da",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.935958,
+          33.915393
+        ]
+      },
+      "properties": {
+        "id": "a6aafbbd-b907-442a-94dd-b58cce1925da",
+        "name": "睢宁县政府",
+        "type": "government",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.915393,
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "longitude": 117.935958,
+        "updatedAt": "2026-09-18T03:22:01.490646+00:00",
+        "description": "人杰地灵"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "d85aadac-73f0-4ea5-a060-ee86a2b90575",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.93299674987794,
+              33.916918472365886
+            ],
+            [
+              117.93237447738649,
+              33.92163708985122
+            ],
+            [
+              117.93932676315308,
+              33.922153450995395
+            ],
+            [
+              117.93928384780885,
+              33.918164925023156
+            ],
+            [
+              117.93705224990846,
+              33.9181827313576
+            ],
+            [
+              117.9369878768921,
+              33.91695408555198
+            ],
+            [
+              117.93299674987794,
+              33.916918472365886
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "d85aadac-73f0-4ea5-a060-ee86a2b90575",
+        "name": "碧桂园",
+        "type": "residential",
+        "phone": "",
+        "source": "user",
+        "address": "永安路（县政府北侧）",
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "updatedAt": "2026-09-18T01:39:26.748847+00:00",
+        "description": "",
+        "longitude": 117.935846539895,
+        "latitude": 33.919639222432
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "87a9c1e4-cc3a-4987-98ca-597e2596e8e7",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.94453024864198,
+              33.90229048898138
+            ],
+            [
+              117.94447660446168,
+              33.899966297584115
+            ],
+            [
+              117.94862866401674,
+              33.89985943668609
+            ],
+            [
+              117.94871449470521,
+              33.90234391792369
+            ],
+            [
+              117.94453024864198,
+              33.90229048898138
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "87a9c1e4-cc3a-4987-98ca-597e2596e8e7",
+        "name": "天元广场活动区",
+        "type": "park",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.9011162101692,
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "longitude": 117.94661072335,
+        "updatedAt": "2026-09-18T01:39:26.748847+00:00",
+        "description": "广场+公园+地下街+西部商业建筑群"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "3d6d19ff-75eb-4fd2-9b55-dbe020303d09",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.94659018516542,
+          33.90219114445274
+        ]
+      },
+      "properties": {
+        "id": "3d6d19ff-75eb-4fd2-9b55-dbe020303d09",
+        "name": "天元广场公园内公厕",
+        "type": "public-toilet",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "updatedAt": "2026-09-18T01:39:26.748847+00:00",
+        "description": "",
+        "longitude": 117.946590185165,
+        "latitude": 33.9021911444527
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "9aaa22b9-b326-4723-8381-bfa340040f89",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.949937582016,
+          33.90432827851885
+        ]
+      },
+      "properties": {
+        "id": "9aaa22b9-b326-4723-8381-bfa340040f89",
+        "name": "国家电网",
+        "type": "government",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T02:35:12.246327+00:00",
+        "updatedAt": "2026-09-18T02:35:12.246327+00:00",
+        "description": "老一中客车接驳点",
+        "longitude": 117.949937582016,
+        "latitude": 33.9043282785188
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "9ab1369d-45af-4566-9716-32facc711f50",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.95025944709779,
+              33.89982242493759
+            ],
+            [
+              117.95028090476991,
+              33.8990743945769
+            ],
+            [
+              117.95184731483461,
+              33.899127825534585
+            ],
+            [
+              117.95178294181825,
+              33.900018336566674
+            ],
+            [
+              117.95025944709779,
+              33.89982242493759
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "9ab1369d-45af-4566-9716-32facc711f50",
+        "name": "新世纪中学",
+        "type": "school",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.8995110282957,
+        "createdAt": "2026-09-18T02:36:50.196244+00:00",
+        "longitude": 117.951065571954,
+        "updatedAt": "2026-09-18T02:36:50.196244+00:00",
+        "description": "睢宁顶级私立初中"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "2b4c9aa0-893c-4052-885a-7f22ff441e83",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.94940114021303,
+              33.89859351445114
+            ],
+            [
+              117.94937968254091,
+              33.89793452617054
+            ],
+            [
+              117.95189023017883,
+              33.89820168419541
+            ],
+            [
+              117.9517185688019,
+              33.900071766932854
+            ],
+            [
+              117.9510533809662,
+              33.899964906167014
+            ],
+            [
+              117.95113921165468,
+              33.899127825534585
+            ],
+            [
+              117.94940114021303,
+              33.89859351445114
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "2b4c9aa0-893c-4052-885a-7f22ff441e83",
+        "name": "睢宁县第二中学",
+        "type": "school",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.8987450933814,
+        "createdAt": "2026-09-18T02:38:42.468942+00:00",
+        "longitude": 117.950860359944,
+        "updatedAt": "2026-09-18T02:38:42.468942+00:00",
+        "description": "幽默南校"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "735fa0e5-2da3-4af7-ba91-213ee5709c9c",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.94455170631409,
+          33.904274850820116
+        ]
+      },
+      "properties": {
+        "id": "735fa0e5-2da3-4af7-ba91-213ee5709c9c",
+        "name": "兴美城市广场",
+        "type": "shopping-mall",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.9042748508201,
+        "createdAt": "2026-09-18T02:40:51.437109+00:00",
+        "longitude": 117.944551706314,
+        "updatedAt": "2026-09-18T03:22:12.592456+00:00",
+        "description": "睢宁第一商场"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "f22e59ff-3142-46a2-b02d-b485c1956871",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.942191362381,
+              33.90375838133948
+            ],
+            [
+              117.942191362381,
+              33.90267200428849
+            ],
+            [
+              117.94414401054384,
+              33.9026185755518
+            ],
+            [
+              117.94405817985536,
+              33.9037940000248
+            ],
+            [
+              117.942191362381,
+              33.90375838133948
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "f22e59ff-3142-46a2-b02d-b485c1956871",
+        "name": "万象天地",
+        "type": "commercial-district",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.9032066125735,
+        "createdAt": "2026-09-18T02:43:18.499698+00:00",
+        "longitude": 117.94315886018,
+        "updatedAt": "2026-09-18T03:22:29.272851+00:00",
+        "description": "曾经的睢宁第一CBD，旧时代之殇，老一辈睢宁青年的回忆"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "d5c30ba0-2afd-4063-8895-10a68d80b2ad",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.9494869709015,
+          33.90821060167082
+        ]
+      },
+      "properties": {
+        "id": "d5c30ba0-2afd-4063-8895-10a68d80b2ad",
+        "name": "泰和医院",
+        "type": "hospital",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T02:47:11.413576+00:00",
+        "updatedAt": "2026-09-18T02:47:11.413576+00:00",
+        "description": "曾经最猛的睢宁医院新势力，据说是一群睢宁黑社会合伙建的。也是老一辈实小人、二中人的回忆",
+        "longitude": 117.949486970902,
+        "latitude": 33.9082106016708
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "5ee478e0-d647-4559-b721-161630809e37",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.9494869709015,
+          33.9108640143924
+        ]
+      },
+      "properties": {
+        "id": "5ee478e0-d647-4559-b721-161630809e37",
+        "name": "睢宁烟草局",
+        "type": "government",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T02:48:45.519875+00:00",
+        "updatedAt": "2026-09-18T02:48:45.519875+00:00",
+        "description": "陈某童年回忆&八楼台球桌",
+        "longitude": 117.949486970902,
+        "latitude": 33.9108640143924
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "8539c6ca-44a6-490f-9042-cfa18d0c182d",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.93935894966127,
+          33.900267677989035
+        ]
+      },
+      "properties": {
+        "id": "8539c6ca-44a6-490f-9042-cfa18d0c182d",
+        "name": "五星电器",
+        "type": "brand-store",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.900267677989,
+        "createdAt": "2026-09-18T02:51:02.439106+00:00",
+        "longitude": 117.939358949661,
+        "updatedAt": "2026-09-18T03:20:41.648566+00:00",
+        "description": "璐姐发迹"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "e6aecad0-db7a-4c89-9076-f3112da7bbf5",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.94146180152894,
+          33.899430600329
+        ]
+      },
+      "properties": {
+        "id": "e6aecad0-db7a-4c89-9076-f3112da7bbf5",
+        "name": "城西小学",
+        "type": "school",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T02:53:43.024207+00:00",
+        "updatedAt": "2026-09-18T02:53:43.024207+00:00",
+        "description": "实小脚底的一根",
+        "longitude": 117.941461801529,
+        "latitude": 33.899430600329
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "0ee7b94b-b3e9-460c-91b0-a15d018ab8d3",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.94030308723451,
+              33.897845473309566
+            ],
+            [
+              117.94033527374269,
+              33.89702896555519
+            ],
+            [
+              117.94440150260927,
+              33.89691931804248
+            ],
+            [
+              117.94425129890443,
+              33.89795233673156
+            ],
+            [
+              117.94030308723451,
+              33.897845473309566
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "0ee7b94b-b3e9-460c-91b0-a15d018ab8d3",
+        "name": "步行街夜市",
+        "type": "commercial-district",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.8974346371875,
+        "createdAt": "2026-09-18T02:56:37.157315+00:00",
+        "longitude": 117.942401144634,
+        "updatedAt": "2026-09-18T03:21:41.224598+00:00",
+        "description": "窜稀卷饼&芋圆葡萄"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "e1379815-7b2d-4813-8d1d-2d4f4bae3c35",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.94450879096986,
+              33.8969549395849
+            ],
+            [
+              117.94841408729555,
+              33.89697275035055
+            ],
+            [
+              117.94839262962341,
+              33.89953746176446
+            ],
+            [
+              117.94448733329774,
+              33.89969775366653
+            ],
+            [
+              117.94450879096986,
+              33.8969549395849
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "e1379815-7b2d-4813-8d1d-2d4f4bae3c35",
+        "name": "中国城",
+        "type": "commercial-district",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.8982910432717,
+        "createdAt": "2026-09-18T02:57:32.114359+00:00",
+        "longitude": 117.946428866304,
+        "updatedAt": "2026-09-18T03:21:31.805215+00:00",
+        "description": "老睢宁唯一真神"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "eab50dda-aebd-40f8-91be-7d8812cac1a8",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.94150203466417,
+          33.89664979049899
+        ]
+      },
+      "properties": {
+        "id": "eab50dda-aebd-40f8-91be-7d8812cac1a8",
+        "name": "柳琴剧团",
+        "type": "cultural-venue",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.896649790499,
+        "createdAt": "2026-09-18T02:59:41.27343+00:00",
+        "longitude": 117.941502034664,
+        "updatedAt": "2026-09-18T03:21:15.276473+00:00",
+        "description": "七年回忆&音乐启蒙"
+      }
+    }
+  ]
+}

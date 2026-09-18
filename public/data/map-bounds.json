@@ -1,0 +1,24 @@
+{
+  "crs": "WGS84 (EPSG:4326)",
+  "south": 33.665,
+  "west": 117.45,
+  "north": 34.22,
+  "east": 118.24,
+  "center": {
+    "lat": 33.9425,
+    "lon": 117.845
+  },
+  "description": "覆盖睢宁县行政边界并在四周保留约 5 公里余量的外接矩形；不是严格行政边界。",
+  "source": "OpenStreetMap 睢宁县行政边界关系的 bbox",
+  "sourceUrl": "https://www.openstreetmap.org/relation/3218568",
+  "osmRelationId": 3218568,
+  "sourceBbox": {
+    "minlat": 33.7123949,
+    "minlon": 117.5085962,
+    "maxlat": 34.174362,
+    "maxlon": 118.1818093
+  },
+  "marginApproxMetres": 5000,
+  "osmBaseTimestamp": "2026-09-15T05:51:06Z",
+  "retrievedAt": "2026-09-15T05:52:07Z"
+}

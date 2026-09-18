@@ -1,0 +1,70 @@
+[
+    { "id": "school", "name": "学校", "color": "#2878b5", "icon": "school" },
+    {
+        "id": "hospital",
+        "name": "医院",
+        "color": "#c94242",
+        "icon": "hospital"
+    },
+    {
+        "id": "supermarket",
+        "name": "超市",
+        "color": "#d07a18",
+        "icon": "supermarket"
+    },
+    {
+        "id": "residential",
+        "name": "小区",
+        "color": "#7656a8",
+        "icon": "residential"
+    },
+    { "id": "shop", "name": "商店", "color": "#b65b89", "icon": "shop" },
+    {
+        "id": "restaurant",
+        "name": "餐饮",
+        "color": "#b65324",
+        "icon": "restaurant"
+    },
+    { "id": "bus-stop", "name": "公交站", "color": "#16858b", "icon": "bus" },
+    { "id": "park", "name": "公园", "color": "#368a55", "icon": "park" },
+    {
+        "id": "government",
+        "name": "政府机关",
+        "color": "#485f9c",
+        "icon": "government"
+    },
+    {
+        "id": "train-station",
+        "name": "火车站",
+        "color": "#53656e",
+        "icon": "train"
+    },
+    {
+        "id": "public-toilet",
+        "name": "公厕",
+        "color": "#247b83",
+        "icon": "toilet"
+    },
+    { "id": "shopping-mall", "name": "商业综合体", "color": "#9c3f78", "icon": "mall" },
+    { "id": "brand-store", "name": "品牌专卖店", "color": "#2f6fbd", "icon": "brand-store" },
+    { "id": "commercial-district", "name": "商业街区/商圈", "color": "#c45a32", "icon": "commercial-district" },
+    { "id": "education-training", "name": "教育培训", "color": "#6262b0", "icon": "education" },
+    { "id": "cinema", "name": "电影院", "color": "#a43d65", "icon": "cinema" },
+    { "id": "entertainment", "name": "娱乐休闲", "color": "#8e4f9f", "icon": "entertainment" },
+    { "id": "market", "name": "市场", "color": "#b7791f", "icon": "market" },
+    { "id": "convenience-store", "name": "便利店", "color": "#247a62", "icon": "convenience-store" },
+    { "id": "pharmacy", "name": "药店", "color": "#15938a", "icon": "pharmacy" },
+    { "id": "bank", "name": "银行", "color": "#315b8a", "icon": "bank" },
+    { "id": "hotel", "name": "酒店", "color": "#7b5c44", "icon": "hotel" },
+    { "id": "beauty-salon", "name": "美容美发", "color": "#c34f7b", "icon": "beauty" },
+    { "id": "fitness-sports", "name": "健身运动", "color": "#26734d", "icon": "fitness" },
+    { "id": "parking", "name": "停车场", "color": "#526b7a", "icon": "parking" },
+    { "id": "gas-station", "name": "加油站", "color": "#bf4b36", "icon": "fuel" },
+    { "id": "auto-service", "name": "汽车服务", "color": "#476f83", "icon": "car-service" },
+    { "id": "express-logistics", "name": "快递物流", "color": "#8a642d", "icon": "logistics" },
+    { "id": "cultural-venue", "name": "文化场馆", "color": "#6f4f8f", "icon": "culture" },
+    { "id": "tourist-attraction", "name": "景点", "color": "#3f7f3f", "icon": "attraction" },
+    { "id": "pet-service", "name": "宠物服务", "color": "#b66d45", "icon": "pet-service" },
+    { "id": "community-service", "name": "社区服务", "color": "#4f728a", "icon": "community-service" },
+    { "id": "other", "name": "其他", "color": "#65736f", "icon": "other" }
+]
