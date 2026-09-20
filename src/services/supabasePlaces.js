@@ -1,7 +1,7 @@
 import { emptyCollection, getPolygonRepresentativeCoordinate, validatePlaces } from "./geojson.js";
 import { cleanupPlaceImagesBeforeDelete } from "./placeImages.js";
 
-export function featureToPlaceRow(feature, ownerId) {
+export function featureToPlaceRow(feature, ownerId, mapId = "suining") {
   const properties = structuredClone(feature.properties ?? {});
   const [longitude, latitude] = feature.geometry.type === "Point"
     ? feature.geometry.coordinates
@@ -12,6 +12,7 @@ export function featureToPlaceRow(feature, ownerId) {
   return {
     id: String(feature.id),
     owner_id: ownerId,
+    map_id: mapId,
     name: properties.name,
     type: properties.type,
     geometry: structuredClone(feature.geometry),
@@ -95,45 +96,49 @@ export async function ensureAnonymousSession(client) {
   return data.session;
 }
 
-export async function fetchCloudPlaces(client, ownerId) {
+export async function fetchCloudPlaces(client, ownerId, mapId) {
   // ai coding：显式 owner 过滤与 RLS 双重约束，避免账号切换时错误映射其他用户行。
-  const { data, error } = await client.from("places").select("*").eq("owner_id", ownerId).order("created_at", { ascending: true });
+  let query = client.from("places").select("*").eq("owner_id", ownerId);
+  if (mapId) query = query.eq("map_id", mapId);
+  const { data, error } = await query.order("created_at", { ascending: true });
   if (error) throw new Error(`云端地点读取失败：${error.message}`);
   return data ?? [];
 }
 
-export async function seedCloudPlaces(client, features, ownerId) {
+export async function seedCloudPlaces(client, features, ownerId, mapId) {
   if (!features.length) return [];
   // ai coding：静态 id 只在 owner 内唯一；重复 seed 更新该 owner 的行，不会与其他匿名 owner 冲突。
   const { data, error } = await client.from("places")
-    .upsert(features.map((feature) => featureToPlaceRow(feature, ownerId)), { onConflict: "owner_id,id" })
+    .upsert(features.map((feature) => featureToPlaceRow(feature, ownerId, mapId)), { onConflict: mapId ? "owner_id,map_id,id" : "owner_id,id" })
     .select();
   if (error) throw new Error(`首次云端导入失败：${error.message}`);
   return data ?? [];
 }
 
-export async function saveCloudPlace(client, feature, ownerId) {
+export async function saveCloudPlace(client, feature, ownerId, mapId) {
   const { data, error } = await client.from("places")
-    .upsert(featureToPlaceRow(feature, ownerId), { onConflict: "owner_id,id" })
+    .upsert(featureToPlaceRow(feature, ownerId, mapId), { onConflict: mapId ? "owner_id,map_id,id" : "owner_id,id" })
     .select()
     .single();
   if (error || !data) throw new Error(`云端保存失败：${error?.message || "未返回保存结果"}`);
   return placeRowToFeature(data);
 }
 
-export async function saveCloudPlaceToCollection(client, collection, feature, ownerId, existingId) {
+export async function saveCloudPlaceToCollection(client, collection, feature, ownerId, existingId, mapId) {
   // ai coding：先等待云端保存成功，再生成新的集合；失败时不触碰调用方持有的正式集合。
-  const savedFeature = await saveCloudPlace(client, feature, ownerId);
+  const savedFeature = await saveCloudPlace(client, feature, ownerId, mapId);
   const features = existingId
     ? collection.features.map((item) => item.id === existingId ? savedFeature : item)
     : [...collection.features, savedFeature];
   return { feature: savedFeature, collection: { ...collection, features } };
 }
 
-export async function deleteCloudPlace(client, id, ownerId) {
+export async function deleteCloudPlace(client, id, ownerId, mapId) {
   // ai coding：数据库行删除前清理该 owner/place 的公开副本与私有原图；失败时保留地点和图片元数据。
-  const restoreImages = await cleanupPlaceImagesBeforeDelete(client, ownerId, id);
-  const { data, error } = await client.from("places").delete().eq("owner_id", ownerId).eq("id", id).select("id");
+  const restoreImages = await cleanupPlaceImagesBeforeDelete(client, ownerId, mapId || "suining", id, !mapId);
+  let query = client.from("places").delete().eq("owner_id", ownerId);
+  if (mapId) query = query.eq("map_id", mapId);
+  const { data, error } = await query.eq("id", id).select("id");
   if (error || !data?.length) {
     const deleteMessage = error ? `云端删除失败：${error.message}` : "云端删除失败：地点不存在或无权删除";
     try {

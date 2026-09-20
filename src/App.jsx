@@ -12,6 +12,7 @@ import AdminPanel from "./components/AdminPanel.jsx";
 import { usePlaces } from "./hooks/usePlaces.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { resolveAppRoute } from "./services/approval.js";
+import { loadMapConfigs } from "./services/maps.js";
 import {
     forgetSessionFileHandle,
     getSessionFileHandle,
@@ -34,6 +35,16 @@ function ManagementApp() {
 }
 
 function ApprovedManagementApp({ auth }) {
+    const [maps, setMaps] = useState([]);
+    const [mapId, setMapId] = useState("suining");
+    const [mapConfigError, setMapConfigError] = useState("");
+    const mapConfig = maps.find((item) => item.id === mapId) ?? null;
+    useEffect(() => {
+        let active = true;
+        loadMapConfigs().then((items) => { if (active) setMaps(items); })
+            .catch((error) => { if (active) setMapConfigError(error.message); });
+        return () => { active = false; };
+    }, []);
     const {
         places,
         types,
@@ -45,8 +56,8 @@ function ApprovedManagementApp({ auth }) {
         getOwnerOperation,
         isOwnerOperationCurrent,
         markSynced,
-    } = usePlaces(auth.session, !auth.status.loading);
-    const [bounds, setBounds] = useState(null);
+    } = usePlaces(auth.session, !auth.status.loading, mapConfig);
+    const bounds = mapConfig?.bounds ?? null;
     const [mode, setMode] = useState("browse");
     const [selectedId, setSelectedId] = useState(null);
     const [newCoordinates, setNewCoordinates] = useState(null);
@@ -78,31 +89,6 @@ function ApprovedManagementApp({ auth }) {
         const timer = setTimeout(() => setToast(""), 3200);
         return () => clearTimeout(timer);
     }, [toast]);
-    useEffect(() => {
-        fetch("/data/map-bounds.json")
-            .then((response) => {
-                if (!response.ok) throw new Error(`HTTP ${response.status}`);
-                return response.json();
-            })
-            .then((data) => {
-                if (
-                    ![data.south, data.west, data.north, data.east].every(
-                        Number.isFinite,
-                    ) ||
-                    data.south >= data.north ||
-                    data.west >= data.east
-                )
-                    throw new Error("范围坐标无效");
-                setBounds(data);
-            })
-            .catch((error) =>
-                setMapErrors((current) => ({
-                    ...current,
-                    bounds: `地图范围加载失败（${error.message}）`,
-                })),
-            );
-    }, []);
-
     const closePanel = useCallback(() => {
         setMode("browse");
         setSelectedId(null);
@@ -112,15 +98,26 @@ function ApprovedManagementApp({ auth }) {
         setEditGeometry(null);
     }, []);
     useEffect(() => {
-        // ai coding：owner 切换时关闭旧账号的详情及所有几何草稿，避免跨账号残留编辑状态。
+        // ai coding：owner 或地图切换时关闭旧范围的详情及所有几何草稿，并立即废弃进行中的文件同步。
         closePanel();
-        forgetSessionFileHandle();
         syncRunRef.current += 1;
         const interrupted = syncingRef.current;
         syncingRef.current = false;
         setSyncing(false);
-        setFileStatus(interrupted ? "账号已切换，旧同步结果已忽略；请重新同步当前账号。" : "");
-    }, [auth.session?.user?.id, closePanel]);
+        setFileStatus(interrupted ? "账号或地图已切换，旧同步结果已忽略；请重新同步当前范围。" : "");
+    }, [auth.session?.user?.id, mapId, closePanel]);
+    useEffect(() => { forgetSessionFileHandle(); }, [auth.session?.user?.id]);
+    useEffect(() => () => {
+        // ai coding：离开当前地图（含页面退出）即丢弃其会话句柄并使尚未完成的同步回调失效，返回时必须重新选择文件。
+        syncRunRef.current += 1;
+        forgetSessionFileHandle(mapId);
+    }, [mapId]);
+    useEffect(() => {
+        // ai coding：地区切换同步清除道路错误、筛选和所有仅属于前一地图的 UI 状态。
+        setMapErrors({ bounds: "", roads: "" });
+        setQuery("");
+        setTypeFilter("");
+    }, [mapId]);
     const closeArea = useCallback(() => {
         const distinct = new Set(drawCoordinates.map(([longitude, latitude]) => `${longitude},${latitude}`));
         if (distinct.size < 3) return notify("至少绘制 3 个不同顶点后才能闭合区域");
@@ -254,10 +251,10 @@ function ApprovedManagementApp({ auth }) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
-        link.download = "places.geojson";
+        link.download = `${mapConfig?.slug || "map"}-places.geojson`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 0);
-        notify("已导出 places.geojson");
+        notify(`已导出 ${mapConfig?.name || "当前地区"}地点数据`);
     };
     const syncPlaces = async () => {
         // ai coding：同步基线无差异时不启动文件选择，按钮与处理函数保持一致。
@@ -276,13 +273,13 @@ function ApprovedManagementApp({ auth }) {
         }
         const runId = ++syncRunRef.current;
         // ai coding：每次点击都从页面会话缓存取得句柄；快照仍固定为本次点击时的完整数据。
-        const fileHandle = getSessionFileHandle();
+        const fileHandle = getSessionFileHandle(mapId);
         setSyncing(true);
         syncingRef.current = true;
         setFileStatus(
             fileHandle
                 ? `正在写入 ${fileHandle.name || "所选文件"}…`
-                : "请选择 public/data/places.geojson；不会读取所选文件，也不会替换当前修改。",
+                : `请选择 ${mapConfig.slug}-places.geojson；不会读取所选文件，也不会替换当前修改。`,
         );
         try {
             const result = await writePlacesFile({
@@ -290,14 +287,15 @@ function ApprovedManagementApp({ auth }) {
                 fileHandle,
                 pickFile: window.showOpenFilePicker.bind(window),
                 confirmWrite: window.confirm.bind(window),
+                mapSlug: mapConfig.slug,
             });
             if (runId !== syncRunRef.current || !isOwnerOperationCurrent(ownerOperation)) return;
             if (result.cancelled)
                 setFileStatus("已取消同步；当前地点数据和本地暂存未更改。");
             else {
-                rememberSessionFileHandle(result.fileHandle);
+                rememberSessionFileHandle(result.fileHandle, mapId);
                 if (!markSynced(snapshot, ownerOperation)) {
-                    forgetSessionFileHandle();
+                    forgetSessionFileHandle(mapId);
                     setFileStatus("账号已切换，旧同步结果已忽略；请重新同步当前账号。");
                     return;
                 }
@@ -310,7 +308,7 @@ function ApprovedManagementApp({ auth }) {
             if (runId !== syncRunRef.current || !isOwnerOperationCurrent(ownerOperation)) return;
             if (fileHandle && (isFileHandleUnavailable(error) || error.name === "AbortError")) {
                 // ai coding：失效或无权限的旧句柄必须先清除；下次用户点击时再安全打开选择器。
-                forgetSessionFileHandle();
+                forgetSessionFileHandle(mapId);
                 const message = error.name === "NotFoundError"
                     ? "同步失败：原文件可能已移动或删除。已清除本会话文件关联，请再次点击“同步到本地”重新选择 places.geojson。"
                     : "同步失败：原文件句柄已失效或没有写入权限。已清除本会话文件关联，请再次点击“同步到本地”重新选择 places.geojson。";
@@ -341,14 +339,22 @@ function ApprovedManagementApp({ auth }) {
         <>
             <header className="site-header">
                 <div>
-                    <p className="eyebrow">SN MAP / 睢宁</p>
-                    <h1>睢宁地图数据</h1>
+                    <p className="eyebrow">SN MAP / 多地区</p>
+                    <h1>{mapConfig?.name || "地区地图"}数据</h1>
                     <p className="intro">
                         在只读的 OpenStreetMap
                         道路底图上，维护独立的用户地点数据。
                     </p>
                 </div>
-                <AuthCard session={auth.session} auth={auth} placeCount={places.features.length} onExport={exportPlaces} />
+                <div className="header-tools">
+                    <label className="map-selector">当前地图
+                        <select value={mapId} onChange={(event) => setMapId(event.target.value)} disabled={!maps.length || busy}>
+                            {maps.map((item) => <option key={item.id} value={item.id}>{item.name}{item.is_active === false ? "（停用）" : ""}</option>)}
+                        </select>
+                        <small>{mapConfig ? `已选择 · ${mapConfig.name}` : "正在加载地区配置…"}</small>
+                    </label>
+                    <AuthCard session={auth.session} auth={auth} placeCount={places.features.length} onExport={exportPlaces} />
+                </div>
             </header>
             <main>
                 {/* ai coding：公开快照跟随地图主列排列，避免继续占用地点维护侧栏。 */}
@@ -384,13 +390,16 @@ function ApprovedManagementApp({ auth }) {
                     {mapErrors.roads && (
                         <p className="map-error" role="alert">{mapErrors.roads}</p>
                     )}
-                    {mapErrors.bounds ? (
+                    {mapConfigError || mapErrors.bounds ? (
                         <div id="map" className="map-loading" role="alert">
-                            {mapErrors.bounds}
+                            {mapConfigError || mapErrors.bounds}
                         </div>
                     ) : bounds ? (
-                        <MapView
-                            bounds={bounds}
+                         <MapView
+                            key={mapId}
+                             bounds={bounds}
+                            mapName={mapConfig.name}
+                            baseRoadsPath={mapConfig.base_roads_path}
                             places={places}
                             types={types}
                             selectedId={selectedId}
@@ -414,7 +423,7 @@ function ApprovedManagementApp({ auth }) {
                     )}
                 </section>
                     {/* ai coding：owner 切换时同步重建卡片，首帧不复用上一账号的本地 UI 状态。 */}
-                    <SnapshotCard key={auth.session?.user?.id ?? "no-owner"} ownerId={auth.session?.user?.id} imagesEnabled={!auth.session?.user?.is_anonymous && (auth.access.state === "approved" || auth.access.isAdmin)} places={places} cloud={cloud} />
+                    <SnapshotCard key={`${auth.session?.user?.id ?? "no-owner"}:${mapId}`} ownerId={auth.session?.user?.id} mapId={mapId} mapName={mapConfig?.name} imagesEnabled={!auth.session?.user?.is_anonymous && (auth.access.state === "approved" || auth.access.isAdmin)} places={places} cloud={cloud} />
                 </div>
                 <aside className="info-panel" aria-label="地点维护面板">
                     {auth.access.isAdmin && <AdminPanel key={auth.access.ownerId} ownerId={auth.access.ownerId} />}
@@ -471,7 +480,8 @@ function ApprovedManagementApp({ auth }) {
                                     feature={
                                         mode === "editing" ? selected : null
                                     }
-                                    ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
+                                     ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
+                                    mapId={mapId}
                                     initialCoordinates={newCoordinates}
                                     geometry={mode === "editing" ? editGeometry : newGeometry}
                                     types={types}
@@ -489,7 +499,8 @@ function ApprovedManagementApp({ auth }) {
                         {mode === "details" && selected && (
                             <PlaceDetails
                                 feature={selected}
-                                ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
+                                 ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
+                                mapId={mapId}
                                 type={types.find(
                                     (type) =>
                                         type.id === selected.properties.type,

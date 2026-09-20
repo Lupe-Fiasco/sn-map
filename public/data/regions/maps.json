@@ -1,0 +1,4 @@
+[
+  { "id": "suining", "config_path": "/data/regions/suining/map-config.json" },
+  { "id": "xuhui", "config_path": "/data/regions/xuhui/map-config.json" }
+]

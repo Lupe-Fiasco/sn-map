@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import {
   forgetSessionFileHandle,
   getSessionFileHandle,
@@ -39,6 +40,23 @@ test("session handle survives callers until explicitly forgotten", () => {
   assert.equal(getSessionFileHandle(), h.handle);
   forgetSessionFileHandle();
   assert.equal(getSessionFileHandle(), null);
+});
+
+test("session handles are map scoped and targeted cleanup requires reselection", () => {
+  const suining = harness().handle; const xuhui = harness().handle;
+  forgetSessionFileHandle();
+  rememberSessionFileHandle(suining, "suining");
+  rememberSessionFileHandle(xuhui, "xuhui");
+  forgetSessionFileHandle("suining");
+  assert.equal(getSessionFileHandle("suining"), null);
+  assert.equal(getSessionFileHandle("xuhui"), xuhui);
+  forgetSessionFileHandle();
+});
+
+test("leaving a map invalidates sync and forgets that map's session handle", async () => {
+  const app = await readFile(new URL("../src/App.jsx", import.meta.url), "utf8");
+  // ai coding：静态守卫锁定地图 effect cleanup，避免以后只在 owner 切换时清理句柄。
+  assert.match(app, /useEffect\(\(\) => \(\) => \{[\s\S]*syncRunRef\.current \+= 1;[\s\S]*forgetSessionFileHandle\(mapId\);[\s\S]*\}, \[mapId\]\)/);
 });
 
 test("recognizes errors that require selecting a file again", () => {

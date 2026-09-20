@@ -75,6 +75,19 @@ test("maps reads and deletes to the current owner in addition to RLS", async () 
   ]);
 });
 
+test("maps reads, seeds and upserts to owner plus map scope", async () => {
+  const filters = []; const upserts = [];
+  const client = { from: () => ({
+    select: () => ({ eq(field, value) { filters.push([field, value]); return this; }, order: async () => ({ data: [], error: null }) }),
+    upsert(payload, options) { upserts.push({ payload, options }); return { select: async () => ({ data: payload, error: null }) }; },
+  }) };
+  await fetchCloudPlaces(client, "owner-a", "xuhui");
+  await seedCloudPlaces(client, [point], "owner-a", "xuhui");
+  assert.deepEqual(filters, [["owner_id", "owner-a"], ["map_id", "xuhui"]]);
+  assert.equal(upserts[0].payload[0].map_id, "xuhui");
+  assert.equal(upserts[0].options.onConflict, "owner_id,map_id,id");
+});
+
 test("reports every failed image restore path when the place delete also fails", async () => {
   const uploads = [];
   const imageRows = [

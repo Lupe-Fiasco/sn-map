@@ -20,7 +20,6 @@ import {
 } from "../services/ownerGeneration.js";
 import { supabase } from "../services/supabaseClient.js";
 
-const DEFAULT_TITLE = "睢宁地点地图";
 const PRESET_OPTIONS = [
     ["basic", SNAPSHOT_LEVEL_LABELS.basic, "地图位置或区域形状、名称、类型和代表经纬度"],
     ["details", SNAPSHOT_LEVEL_LABELS.details, "基础级别 + 备注、地址、电话等安全业务信息"],
@@ -34,9 +33,10 @@ function shareUrl(token) {
     return url.toString();
 }
 
-export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) {
+export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, places, cloud }) {
+    const defaultTitle = `${mapName || "当前地区"}地点地图`;
     const [snapshot, setSnapshot] = useState(null);
-    const [title, setTitle] = useState(DEFAULT_TITLE);
+    const [title, setTitle] = useState(defaultTitle);
     const [status, setStatus] = useState("");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
@@ -45,11 +45,12 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
     const [imageCountError, setImageCountError] = useState("");
     const [imageCountReload, setImageCountReload] = useState(0);
     const [loadedOwnerId, setLoadedOwnerId] = useState(null);
-    const ownerGenerationRef = useRef(createOwnerGeneration(ownerId ?? null));
+    const scope = ownerId && mapId ? `${ownerId}:${mapId}` : null;
+    const ownerGenerationRef = useRef(createOwnerGeneration(scope));
     // ai coding：render 时立即使前一账号及更早快照请求失效，所有完成回调均须通过同一 guard。
-    updateOwnerGeneration(ownerGenerationRef.current, ownerId ?? null);
-    const currentSnapshot = snapshotForOwner(snapshot, ownerId);
-    const currentShareToken = shareTokenForOwner(snapshot, ownerId);
+    updateOwnerGeneration(ownerGenerationRef.current, scope);
+    const currentSnapshot = snapshotForOwner(snapshot, ownerId, mapId);
+    const currentShareToken = shareTokenForOwner(snapshot, ownerId, mapId);
     const link = useMemo(
         () => (currentShareToken ? shareUrl(currentShareToken) : ""),
         [currentShareToken],
@@ -59,19 +60,19 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
         let active = true;
         const operation = captureOwnerGeneration(ownerGenerationRef.current);
         setSnapshot(null);
-        setTitle(DEFAULT_TITLE);
+        setTitle(defaultTitle);
         setStatus("");
         setError("");
         setBusy(false);
         setPreset("basic");
         setLoadedOwnerId(null);
         if (!ownerId || !supabase) {
-            setLoadedOwnerId(ownerId ?? null);
+            setLoadedOwnerId(scope);
             return undefined;
         }
-        fetchOwnerSnapshot(supabase, ownerId)
+        fetchOwnerSnapshot(supabase, ownerId, mapId)
             .then((row) => {
-                const ownerSnapshot = snapshotForOwner(row, operation.ownerId);
+                const ownerSnapshot = snapshotForOwner(row, ownerId, mapId);
                 if (
                     !active ||
                     !isOwnerGenerationCurrent(
@@ -104,7 +105,7 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
         return () => {
             active = false;
         };
-    }, [ownerId, imagesEnabled]);
+    }, [ownerId, mapId, imagesEnabled, defaultTitle]);
 
     useEffect(() => {
         let active = true;
@@ -112,7 +113,7 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
         setImageCountError("");
         if (!ownerId || !imagesEnabled || !supabase || !ids.length) { setImageCount(0); return undefined; }
         setImageCount(null);
-        const refreshImageCount = () => supabase.from("place_images").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).in("place_id", ids)
+        const refreshImageCount = () => supabase.from("place_images").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).eq("map_id", mapId).in("place_id", ids)
             .then(({ count, error: countError }) => {
                 if (!active) return;
                 if (countError) setImageCountError("实景图片数量读取失败，请确认已执行 migration 006。");
@@ -121,7 +122,7 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
         refreshImageCount();
         window.addEventListener("place-images-changed", refreshImageCount);
         return () => { active = false; window.removeEventListener("place-images-changed", refreshImageCount); };
-    }, [ownerId, imagesEnabled, places, imageCountReload]);
+    }, [ownerId, mapId, imagesEnabled, places, imageCountReload]);
 
     const publish = async () => {
         invalidateOwnerGeneration(ownerGenerationRef.current);
@@ -130,12 +131,12 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
         setError("");
         setStatus("正在生成并发布脱敏快照…");
         try {
-            const row = await publishSnapshot(supabase, ownerId, title, places, preset, { images: imagesEnabled });
+            const row = await publishSnapshot(supabase, ownerId, title, places, preset, { images: imagesEnabled }, undefined, mapId);
             if (
                 !isOwnerGenerationCurrent(ownerGenerationRef.current, operation)
             )
                 return;
-            const ownerSnapshot = snapshotForOwner(row, operation.ownerId);
+            const ownerSnapshot = snapshotForOwner(row, ownerId, mapId);
             if (!ownerSnapshot) return;
             setSnapshot(ownerSnapshot);
             setTitle(ownerSnapshot.title);
@@ -157,10 +158,10 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
     const copy = async () => {
         const operation = captureOwnerGeneration(ownerGenerationRef.current);
         // ai coding：复制前重新按当前 owner 取 token，不能使用前一账号 render 遗留的 link。
-        const token = shareTokenForOwner(snapshot, ownerId);
+        const token = shareTokenForOwner(snapshot, ownerId, mapId);
         if (
             !token ||
-            operation.ownerId !== ownerId ||
+            operation.ownerId !== scope ||
             !isOwnerGenerationCurrent(ownerGenerationRef.current, operation)
         )
             return;
@@ -180,12 +181,12 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
         setBusy(true);
         setError("");
         try {
-            const row = await unpublishSnapshot(supabase, ownerId);
+            const row = await unpublishSnapshot(supabase, ownerId, mapId);
             if (
                 !isOwnerGenerationCurrent(ownerGenerationRef.current, operation)
             )
                 return;
-            const ownerSnapshot = snapshotForOwner(row, operation.ownerId);
+            const ownerSnapshot = snapshotForOwner(row, ownerId, mapId);
             if (!ownerSnapshot) return;
             setSnapshot(ownerSnapshot);
             setStatus(row.cleanupWarning
@@ -203,10 +204,11 @@ export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) 
     const unavailable =
         !ownerId ||
         cloud.state !== "connected" ||
-        cloud.ownerId !== ownerId ||
+         cloud.ownerId !== ownerId ||
+        cloud.mapId !== mapId ||
         cloud.saving;
     // ai coding：账号切换时旧快照立即隐藏；空状态始终以 basic 驱动表单，渲染逻辑不接收 null disclosure。
-    const snapshotLoading = Boolean(ownerId && supabase && loadedOwnerId !== ownerId);
+    const snapshotLoading = Boolean(ownerId && supabase && loadedOwnerId !== scope);
     const publishedDisclosure = currentSnapshot
         ? (snapshotDisclosure(currentSnapshot.snapshot, currentSnapshot) ?? SNAPSHOT_PRESETS.basic)
         : SNAPSHOT_PRESETS.basic;

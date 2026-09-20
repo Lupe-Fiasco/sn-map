@@ -12,15 +12,17 @@ const getJson = async (url) => {
 };
 
 const cloudStatus = (state, message, saving = false, ownerId = null) => ({ state, message, saving, ownerId });
+const ownerIdForScope = (scope) => String(scope).split(":")[0];
 
-export function usePlaces(session, authReady = true) {
+export function usePlaces(session, authReady = true, mapConfig = null) {
   const [places, setPlaces] = useState(emptyCollection);
   const [baseline, setBaseline] = useState(emptyCollection);
   const [types, setTypes] = useState([]);
   const [status, setStatus] = useState({ loading: true, error: "", message: "正在加载…" });
   const [cloud, setCloud] = useState(() => cloudStatus("connecting", "正在连接云端…"));
   const cloudSessionRef = useRef(null);
-  const renderOwnerId = session?.user?.id || "offline";
+  const mapId = mapConfig?.id || "loading-map";
+  const renderOwnerId = `${session?.user?.id || "offline"}:${mapId}`;
   const ownerGenerationRef = useRef(createOwnerGeneration(renderOwnerId));
   const authReadyRef = useRef(authReady);
   const loadedGenerationRef = useRef(null);
@@ -39,6 +41,7 @@ export function usePlaces(session, authReady = true) {
   useEffect(() => {
     let active = true;
     const ownerId = session?.user?.id ?? null;
+    if (!mapConfig) return undefined;
     const localOwnerId = ownerId || "offline";
     const loadGeneration = captureOwnerGeneration(ownerGenerationRef.current);
     cloudSessionRef.current = null;
@@ -49,7 +52,7 @@ export function usePlaces(session, authReady = true) {
     setStatus({ loading: true, error: "", message: "正在加载…" });
     const load = async () => {
       try {
-        const [loadedTypes, filePlaces] = await Promise.all([getJson("/data/place-types.json"), getJson("/data/places.geojson")]);
+        const [loadedTypes, filePlaces] = await Promise.all([getJson("/data/place-types.json"), getJson(mapConfig.seed_places_path)]);
         if (!active || !isOwnerGenerationCurrent(ownerGenerationRef.current, loadGeneration)) return;
         // ai coding：无论云端是否可用，先建立经过完整校验的本地回退与文件同步基线。
         if (!Array.isArray(loadedTypes) || !loadedTypes.length || loadedTypes.some((item) => !item.id || !item.name || !/^#[0-9a-f]{6}$/i.test(item.color) || !/^[a-z-]+$/.test(item.icon))) throw new Error("地点类型配置无效");
@@ -57,7 +60,7 @@ export function usePlaces(session, authReady = true) {
         let localCurrent = normalizedFile;
         try { if (ownerId) migrateLegacyPlacesStorage(ownerId); } catch { /* localStorage 可能不可用。 */ }
         try {
-          const draft = readDraft(localOwnerId);
+          const draft = readDraft(localOwnerId, localStorage, mapId);
           if (draft) {
             localCurrent = normalizeCollection(validatePlaces(draft, loadedTypes));
           }
@@ -67,7 +70,7 @@ export function usePlaces(session, authReady = true) {
         setTypes(loadedTypes);
         let syncBaseline = normalizedFile;
         try {
-          const savedBaseline = readSyncBaseline(localOwnerId);
+          const savedBaseline = readSyncBaseline(localOwnerId, localStorage, mapId);
           if (savedBaseline) {
             syncBaseline = normalizeCollection(validatePlaces(savedBaseline, loadedTypes));
           }
@@ -93,29 +96,29 @@ export function usePlaces(session, authReady = true) {
 
         try {
           if (!isOwnerGenerationCurrent(ownerGenerationRef.current, loadGeneration)) return;
-          let rows = await fetchCloudPlaces(supabase, ownerId);
+          let rows = await fetchCloudPlaces(supabase, ownerId, mapId);
           if (!isOwnerGenerationCurrent(ownerGenerationRef.current, loadGeneration)) return;
           let seeded = false;
           let alreadySeeded = false;
-          try { alreadySeeded = hasSeededCloud(ownerId); } catch { /* 云端数据本身仍可作为初始化依据。 */ }
+          try { alreadySeeded = hasSeededCloud(ownerId, localStorage, mapId); } catch { /* 云端数据本身仍可作为初始化依据。 */ }
 
           if (!rows.length && !alreadySeeded) {
             if (!isOwnerGenerationCurrent(ownerGenerationRef.current, loadGeneration)) return;
-            rows = await seedCloudPlaces(supabase, localCurrent.features, ownerId);
+            rows = await seedCloudPlaces(supabase, localCurrent.features, ownerId, mapId);
             if (!isOwnerGenerationCurrent(ownerGenerationRef.current, loadGeneration)) return;
-            try { markCloudSeeded(ownerId); } catch { /* localStorage 不可用不影响已完成的云端写入。 */ }
+            try { markCloudSeeded(ownerId, localStorage, mapId); } catch { /* localStorage 不可用不影响已完成的云端写入。 */ }
             seeded = localCurrent.features.length > 0;
           }
 
           const invalidRows = [];
           const cloudPlaces = normalizeCollection(rowsToCollection(rows, loadedTypes, (issue) => invalidRows.push(issue)));
           if (!active || !isOwnerGenerationCurrent(ownerGenerationRef.current, loadGeneration)) return;
-          cloudSessionRef.current = { ownerId, generation: loadGeneration.generation };
+          cloudSessionRef.current = { ownerId: renderOwnerId, userId: ownerId, mapId, generation: loadGeneration.generation };
           loadedGenerationRef.current = loadGeneration;
           setPlaces(cloudPlaces);
-          try { writeDraft(ownerId, cloudPlaces); } catch { /* 云端仍是主数据源。 */ }
+          try { writeDraft(ownerId, cloudPlaces, localStorage, mapId); } catch { /* 云端仍是主数据源。 */ }
           const isolationMessage = invalidRows.length ? `，已隔离 ${invalidRows.length} 条非法云端数据` : "";
-          setCloud(cloudStatus("connected", seeded ? `云端已连接，首次导入 ${cloudPlaces.features.length} 个地点${isolationMessage}` : `云端已连接${isolationMessage}`, false, ownerId));
+          setCloud({ ...cloudStatus("connected", seeded ? `云端已连接，首次导入 ${cloudPlaces.features.length} 个地点${isolationMessage}` : `云端已连接${isolationMessage}`, false, ownerId), mapId });
           setStatus({ loading: false, error: "", message: `已从云端加载 ${cloudPlaces.features.length} 个用户地点${isolationMessage}` });
         } catch (error) {
           if (!active || !isOwnerGenerationCurrent(ownerGenerationRef.current, loadGeneration)) return;
@@ -134,16 +137,16 @@ export function usePlaces(session, authReady = true) {
     };
     load();
     return () => { active = false; };
-  }, [session?.user?.id, authReady]);
+  }, [session?.user?.id, authReady, mapConfig, mapId, renderOwnerId]);
 
   const storeDraft = useCallback((next, ownerId) => {
     try {
-      writeDraft(ownerId, next);
+      writeDraft(ownerId, next, localStorage, mapId);
       return { draftSaved: true, draftError: null };
     } catch (error) {
       return { draftSaved: false, draftError: error instanceof Error ? error : new Error("浏览器本地存储不可用") };
     }
-  }, []);
+  }, [mapId]);
 
   const save = useCallback(async (values, existing) => {
     if (operationRef.current && isOwnerGenerationCurrent(ownerGenerationRef.current, operationRef.current)) throw new Error("云端操作正在进行，请稍候");
@@ -154,16 +157,16 @@ export function usePlaces(session, authReady = true) {
 
     if (session && session.ownerId === operation.ownerId && session.generation === operation.generation) {
       operationRef.current = operation;
-      setCloud(cloudStatus("connected", "正在保存到云端…", true, session.ownerId));
+      setCloud({ ...cloudStatus("connected", "正在保存到云端…", true, session.userId), mapId: session.mapId });
       try {
         // ai coding：云端确认成功后才提交正式内存集合，失败时完整保留表单与原集合。
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
-        const { feature: savedFeature, collection: next } = await saveCloudPlaceToCollection(supabase, places, feature, session.ownerId, existing?.id);
+        const { feature: savedFeature, collection: next } = await saveCloudPlaceToCollection(supabase, places, feature, session.userId, existing?.id, session.mapId);
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
         validatePlaces({ ...emptyCollection(), features: [savedFeature] }, types);
-        const draftResult = storeDraft(next, operation.ownerId);
+        const draftResult = storeDraft(next, session.userId);
         setPlaces(next);
-        setCloud(cloudStatus("connected", "云端已连接，地点已保存", false, session.ownerId));
+        setCloud({ ...cloudStatus("connected", "云端已连接，地点已保存", false, session.userId), mapId: session.mapId });
         return { feature: savedFeature, ...draftResult, cloudSaved: true };
       } catch (error) {
         if (isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) setCloud(cloudStatus("failed", error.message));
@@ -175,7 +178,7 @@ export function usePlaces(session, authReady = true) {
 
     if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
     const next = { ...places, features: existing ? places.features.map((item) => item.id === existing.id ? feature : item) : [...places.features, feature] };
-    const draftResult = storeDraft(next, operation.ownerId);
+    const draftResult = storeDraft(next, ownerIdForScope(operation.ownerId));
     setPlaces(next);
     return { feature, ...draftResult, cloudSaved: false };
   }, [places, storeDraft, types]);
@@ -187,15 +190,15 @@ export function usePlaces(session, authReady = true) {
     const operation = captureOwnerGeneration(ownerGenerationRef.current);
     if (session && session.ownerId === operation.ownerId && session.generation === operation.generation) {
       operationRef.current = operation;
-      setCloud(cloudStatus("connected", "正在从云端删除…", true, session.ownerId));
+      setCloud({ ...cloudStatus("connected", "正在从云端删除…", true, session.userId), mapId: session.mapId });
       try {
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
-        await deleteCloudPlace(supabase, id, session.ownerId);
+        await deleteCloudPlace(supabase, id, session.userId, session.mapId);
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
         const next = { ...places, features: places.features.filter((item) => item.id !== id) };
-        const draftResult = storeDraft(next, operation.ownerId);
+        const draftResult = storeDraft(next, session.userId);
         setPlaces(next);
-        setCloud(cloudStatus("connected", "云端已连接，地点已删除", false, session.ownerId));
+        setCloud({ ...cloudStatus("connected", "云端已连接，地点已删除", false, session.userId), mapId: session.mapId });
         return { ...draftResult, cloudSaved: true };
       } catch (error) {
         if (isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) setCloud(cloudStatus("failed", error.message));
@@ -207,7 +210,7 @@ export function usePlaces(session, authReady = true) {
 
     if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
     const next = { ...places, features: places.features.filter((item) => item.id !== id) };
-    const draftResult = storeDraft(next, operation.ownerId);
+    const draftResult = storeDraft(next, ownerIdForScope(operation.ownerId));
     setPlaces(next);
     return { ...draftResult, cloudSaved: false };
   }, [places, storeDraft]);
@@ -219,11 +222,11 @@ export function usePlaces(session, authReady = true) {
   const markSynced = useCallback((snapshot, operation) => {
     // ai coding：文件成功写入后才同时更新内存和 localStorage 同步基线。
     if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) return false;
-    try { writeSyncBaseline(operation.ownerId, snapshot); } catch { /* 当前会话仍可准确显示同步状态。 */ }
+    try { writeSyncBaseline(ownerIdForScope(operation.ownerId), snapshot, localStorage, mapId); } catch { /* 当前会话仍可准确显示同步状态。 */ }
     if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) return false;
     setBaseline(structuredClone(snapshot));
     return true;
-  }, []);
+  }, [mapId]);
   const unsynced = useMemo(() => getUnsyncedChanges(places, baseline), [places, baseline]);
 
   return { places, types, status, cloud, unsynced, save, remove, getOwnerOperation, isOwnerOperationCurrent, markSynced };

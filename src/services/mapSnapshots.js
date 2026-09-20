@@ -160,10 +160,11 @@ export function createShareToken(randomUUID = () => crypto.randomUUID()) {
   return randomUUID().replaceAll("-", "");
 }
 
-export function snapshotRow(ownerId, title, collection, shareToken, level = "basic", imagesByPlace = {}) {
+export function snapshotRow(ownerId, title, collection, shareToken, level = "basic", imagesByPlace = {}, mapId = "suining") {
   const fields = publicationFields(level);
   return {
     owner_id: ownerId,
+    map_id: mapId,
     share_token: shareToken,
     title: title.trim() || "睢宁地点地图",
     snapshot: createPublicSnapshot(collection, fields, imagesByPlace),
@@ -175,12 +176,12 @@ export function snapshotRow(ownerId, title, collection, shareToken, level = "bas
 }
 
 // ai coding：快照及分享 token 必须与当前 owner 严格匹配，供渲染和复制共用同一判定。
-export function snapshotForOwner(snapshot, ownerId) {
-  return ownerId && snapshot?.owner_id === ownerId ? snapshot : null;
+export function snapshotForOwner(snapshot, ownerId, mapId) {
+  return ownerId && snapshot?.owner_id === ownerId && (!mapId || snapshot.map_id === mapId) ? snapshot : null;
 }
 
-export function shareTokenForOwner(snapshot, ownerId) {
-  const current = snapshotForOwner(snapshot, ownerId);
+export function shareTokenForOwner(snapshot, ownerId, mapId) {
+  const current = snapshotForOwner(snapshot, ownerId, mapId);
   return current?.is_public && current.share_token ? current.share_token : "";
 }
 
@@ -198,29 +199,33 @@ function snapshotError(prefix, error) {
     : `${prefix}：${error?.message || "云端请求失败"}`);
 }
 
-export async function fetchOwnerSnapshot(client, ownerId) {
-  const { data, error } = await client.from("map_snapshots").select("*").eq("owner_id", ownerId).maybeSingle();
+export async function fetchOwnerSnapshot(client, ownerId, mapId) {
+  let query = client.from("map_snapshots").select("*").eq("owner_id", ownerId);
+  if (mapId) query = query.eq("map_id", mapId);
+  const { data, error } = await query.maybeSingle();
   if (error) throw snapshotError("公开状态读取失败", error);
   return data ?? null;
 }
 
-export async function publishSnapshot(client, ownerId, title, collection, level = "basic", access = {}, randomUUID = () => crypto.randomUUID()) {
+export async function publishSnapshot(client, ownerId, title, collection, level = "basic", access = {}, randomUUID = () => crypto.randomUUID(), mapId = "suining") {
+  const explicitMap = arguments.length >= 8;
   const disclosure = publicationFields(level);
   if (level === "images" && access.images !== true) throw new Error("当前账号不能发布实景图片");
-  const existing = await fetchOwnerSnapshot(client, ownerId);
+  const existing = await fetchOwnerSnapshot(client, ownerId, explicitMap ? mapId : undefined);
   const token = existing?.share_token || createShareToken(randomUUID);
   // ai coding：图片能力由已审核账号状态单独授权；调用方即使伪造 fields.images，也不会触发私有图片查询或复制。
   const releaseId = randomUUID().replaceAll("-", "");
   let published = { imagesByPlace: {}, uploadedPaths: [] };
   if (disclosure.images) {
-    const rows = await fetchImagesForPlaces(client, ownerId, collection.features.map((feature) => String(feature.id)));
+    const placeIds = collection.features.map((feature) => String(feature.id));
+    const rows = explicitMap ? await fetchImagesForPlaces(client, ownerId, mapId, placeIds) : await fetchImagesForPlaces(client, ownerId, placeIds);
     const publishImages = typeof access.copyImages === "function" ? access.copyImages : copyPublishedImages;
-    published = await publishImages(client, ownerId, token, releaseId, rows);
+    published = explicitMap ? await publishImages(client, ownerId, mapId, token, releaseId, rows) : await publishImages(client, ownerId, token, releaseId, rows);
   }
   // ai coding：仅复制调用时的正式 FeatureCollection；后续地点编辑不会引用或改变已发布 JSON。
-  const payload = snapshotRow(ownerId, title, collection, token, level, published.imagesByPlace);
+  const payload = snapshotRow(ownerId, title, collection, token, level, published.imagesByPlace, mapId);
   const { data, error } = await client.from("map_snapshots")
-    .upsert(payload, { onConflict: "owner_id" }).select().single();
+    .upsert(payload, { onConflict: explicitMap ? "owner_id,map_id" : "owner_id" }).select().single();
   if (error || !data) {
     if (published.uploadedPaths.length) {
       const { error: rollbackError } = await client.storage.from("published-place-images").remove(published.uploadedPaths);
@@ -234,17 +239,19 @@ export async function publishSnapshot(client, ownerId, title, collection, level 
     throw snapshotError("公开快照发布失败", error);
   }
   // ai coding：新快照成功后再清理旧 release；失败只产生清理提示，不把已提交的新快照误报为发布失败。
-  try { await cleanupPublishedImages(client, ownerId, token, disclosure.images ? releaseId : ""); }
+  try { explicitMap ? await cleanupPublishedImages(client, ownerId, mapId, token, disclosure.images ? releaseId : "") : await cleanupPublishedImages(client, ownerId, token, disclosure.images ? releaseId : ""); }
   catch (cleanupError) { return { ...data, cleanupWarning: cleanupError.message, pendingCleanupPaths: cleanupError.pendingCleanupPaths ?? [] }; }
   return data;
 }
 
-export async function unpublishSnapshot(client, ownerId) {
-  const existing = await fetchOwnerSnapshot(client, ownerId);
-  const { data, error } = await client.from("map_snapshots").update({ is_public: false })
-    .eq("owner_id", ownerId).select().single();
+export async function unpublishSnapshot(client, ownerId, mapId = "suining") {
+  const explicitMap = arguments.length >= 3;
+  const existing = await fetchOwnerSnapshot(client, ownerId, explicitMap ? mapId : undefined);
+  let query = client.from("map_snapshots").update({ is_public: false }).eq("owner_id", ownerId);
+  if (explicitMap) query = query.eq("map_id", mapId);
+  const { data, error } = await query.select().single();
   if (error || !data) throw snapshotError("取消公开失败", error);
-  try { await cleanupPublishedImages(client, ownerId, existing?.share_token); }
+  try { explicitMap ? await cleanupPublishedImages(client, ownerId, mapId, existing?.share_token) : await cleanupPublishedImages(client, ownerId, existing?.share_token); }
   catch (cleanupError) { return { ...data, cleanupWarning: `${cleanupError.message}；公开已撤销，但旧 URL 的缓存或既有副本无法绝对收回。`, pendingCleanupPaths: cleanupError.pendingCleanupPaths ?? [] }; }
   return data;
 }

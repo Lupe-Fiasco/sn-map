@@ -1,0 +1,30 @@
+{
+  "id": "xuhui",
+  "slug": "xuhui",
+  "name": "上海市徐汇区",
+  "bounds": {
+    "south": 31.055,
+    "west": 121.33,
+    "north": 31.27,
+    "east": 121.525
+  },
+  "center": {
+    "lat": 31.1625,
+    "lon": 121.4275
+  },
+  "base_roads_path": "/data/regions/xuhui/base-roads.geojson",
+  "seed_places_path": "/data/regions/xuhui/places.geojson",
+  "is_active": true,
+  "source": "OpenStreetMap 上海市徐汇区行政边界关系的 bbox",
+  "source_url": "https://www.openstreetmap.org/relation/1278188",
+  "osm_relation_query": "relation[boundary=administrative][admin_level=6][name=徐汇区]",
+  "osm_relation_id": 1278188,
+  "source_bbox": {
+    "minlat": 31.102562,
+    "minlon": 121.3868848,
+    "maxlat": 31.2220274,
+    "maxlon": 121.4719269
+  },
+  "margin_approx_metres": 5000,
+  "retrieved_at": "2026-09-20T07:37:31Z"
+}

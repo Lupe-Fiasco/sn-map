@@ -27,8 +27,10 @@ npm run build:map-data
 ## 数据约定
 
 - 所有坐标为 WGS84（EPSG:4326）；GeoJSON 坐标严格使用 `[经度, 纬度]`。
+- 多地区配置统一存于 `public.maps`，业务数据以 `owner_id + map_id` 隔离；静态运行时数据放在 `public/data/regions/<slug>/`，不得把一个地区的 seed、道路、草稿、图片或快照用于另一地区。
 - 用户地点是 `FeatureCollection` 中的 `Point` 或仅含一个闭合外环的 `Polygon`，均须带稳定顶层 `id` 和同值 `properties.id`；类型必须存在于 `place-types.json`，`properties.source` 为 `user`。Polygon 至少有 3 个不同顶点，不支持洞、多面或独立线/曲线。
 - `base-roads.geojson` 是只读 OSM 线图层；用户地点以 Supabase `public.places` 为主数据，`places.geojson` 仅为初始化来源及手动同步镜像。不得混合 base/user 数据，也不得让页面修改道路层。
+- 根目录旧 GeoJSON 仅为兼容文件；新增代码必须从当前 map config 的 `base_roads_path` / `seed_places_path` 读取。Overpass 只允许构建脚本调用，前端运行时不得调用。
 - 云端保存成功后才更新正式内存集合；`localStorage` 草稿/回退镜像与文件同步基线必须按 owner_id 分区，并使用按用户区分的初始化标记防止重复 seed。云端不可用时当前 owner 的有效草稿优先于静态文件，绝不跨账号复用。
 - 首次“同步到本地”选择文件后，必须在用户激活仍有效时立即 `createWritable()`，随后确认并覆盖写入点击时的完整快照；绝不读取所选文件覆盖当前数据。成功写入才更新同步基线。文件句柄仅保留在当前页面会话。
 - 导出始终下载当前完整 `places.geojson`。暂不提供恢复初始文件功能。

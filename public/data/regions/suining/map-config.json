@@ -1,0 +1,29 @@
+{
+  "id": "suining",
+  "slug": "suining",
+  "name": "睢宁县",
+  "bounds": {
+    "south": 33.665,
+    "west": 117.45,
+    "north": 34.22,
+    "east": 118.24
+  },
+  "center": {
+    "lat": 33.9425,
+    "lon": 117.845
+  },
+  "base_roads_path": "/data/regions/suining/base-roads.geojson",
+  "seed_places_path": "/data/regions/suining/places.geojson",
+  "is_active": true,
+  "source": "OpenStreetMap 睢宁县行政边界关系的 bbox",
+  "source_url": "https://www.openstreetmap.org/relation/3218568",
+  "osm_relation_id": 3218568,
+  "source_bbox": {
+    "minlat": 33.7123949,
+    "minlon": 117.5085962,
+    "maxlat": 34.174362,
+    "maxlon": 118.1818093
+  },
+  "margin_approx_metres": 5000,
+  "retrieved_at": "2026-09-20T05:44:43Z"
+}

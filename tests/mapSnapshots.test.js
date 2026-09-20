@@ -263,6 +263,12 @@ test("public reads resolve only RPC-built published bucket paths against the con
   }]);
 });
 
+test("public reads retain only the RPC-provided matching map configuration", async () => {
+  const mapConfig = { id: "xuhui", slug: "xuhui", name: "上海市徐汇区", bounds: {}, center: {}, base_roads_path: "/data/regions/xuhui/base-roads.geojson", seed_places_path: "/data/regions/xuhui/places.geojson", is_active: true };
+  const client = { supabaseUrl: "https://project.supabase.co", rpc: () => ({ maybeSingle: async () => ({ data: { map_config: mapConfig, snapshot: { features: [] } }, error: null }) }) };
+  assert.deepEqual((await fetchPublicSnapshot(client, "t".repeat(32))).map_config, mapConfig);
+});
+
 test("reports a missing migration without crashing", async () => {
   const query = { maybeSingle: async () => ({ data: null, error: { code: "PGRST202", message: "missing" } }) };
   await assert.rejects(fetchPublicSnapshot({ rpc: () => query }, "t".repeat(32)), /migration 004/);

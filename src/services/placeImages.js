@@ -16,9 +16,12 @@ export function validateImageFile(file) {
   return file;
 }
 
-export function assertOwnerPlacePath(ownerId, placeId, path) {
-  if (![ownerId, placeId].every((value) => typeof value === "string" && SAFE_SEGMENT.test(value))) throw new Error("图片归属信息无效。");
-  if (typeof path !== "string" || !path.startsWith(`${ownerId}/${placeId}/`) || path.split("/").length !== 3) throw new Error("图片存储路径与当前地点不匹配。");
+export function assertOwnerPlacePath(ownerId, mapId, placeId, path) {
+  if (path === undefined) { path = placeId; placeId = mapId; mapId = "suining"; }
+  if (![ownerId, mapId, placeId].every((value) => typeof value === "string" && SAFE_SEGMENT.test(value))) throw new Error("图片归属信息无效。");
+  const scoped = typeof path === "string" && path.startsWith(`${ownerId}/${mapId}/${placeId}/`) && path.split("/").length === 4;
+  const legacySuining = mapId === "suining" && typeof path === "string" && path.startsWith(`${ownerId}/${placeId}/`) && path.split("/").length === 3;
+  if (!scoped && !legacySuining) throw new Error("图片存储路径与当前地图或地点不匹配。");
   return path;
 }
 
@@ -80,11 +83,11 @@ export async function browserPublicImageCodec(blob, { maxDimension, quality }) {
   }
 }
 
-export async function fetchPlaceImages(client, ownerId, placeId, signedSeconds = 600) {
-  const { data, error } = await client.from("place_images").select("*").eq("owner_id", ownerId).eq("place_id", placeId).order("sort_order").order("created_at");
+export async function fetchPlaceImages(client, ownerId, mapId, placeId, signedSeconds = 600) {
+  const { data, error } = await client.from("place_images").select("*").eq("owner_id", ownerId).eq("map_id", mapId).eq("place_id", placeId).order("sort_order").order("created_at");
   if (error) throw imageError("图片读取失败", error);
   return Promise.all((data ?? []).map(async (row) => {
-    assertOwnerPlacePath(ownerId, placeId, row.storage_path);
+    assertOwnerPlacePath(ownerId, mapId, placeId, row.storage_path);
     const { data: signed, error: signedError } = await client.storage.from(PRIVATE_IMAGE_BUCKET).createSignedUrl(row.storage_path, signedSeconds);
     if (signedError || !signed?.signedUrl) throw imageError("图片预览生成失败", signedError);
     return { ...row, previewUrl: signed.signedUrl };
@@ -92,14 +95,14 @@ export async function fetchPlaceImages(client, ownerId, placeId, signedSeconds =
 }
 
 // ai coding：文件与元数据分步写入时执行补偿删除，浏览器只使用当前 session 和 publishable key。
-export async function uploadPlaceImage(client, ownerId, placeId, file, randomUUID = () => crypto.randomUUID()) {
+export async function uploadPlaceImage(client, ownerId, mapId, placeId, file, randomUUID = () => crypto.randomUUID()) {
   validateImageFile(file);
   const id = randomUUID();
-  const path = `${ownerId}/${placeId}/${id}.${extensionFor(file.type)}`;
-  assertOwnerPlacePath(ownerId, placeId, path);
+  const path = `${ownerId}/${mapId}/${placeId}/${id}.${extensionFor(file.type)}`;
+  assertOwnerPlacePath(ownerId, mapId, placeId, path);
   const { error: uploadError } = await client.storage.from(PRIVATE_IMAGE_BUCKET).upload(path, file, { contentType: file.type, upsert: false });
   if (uploadError) throw imageError("图片上传失败", uploadError);
-  const row = { id, owner_id: ownerId, place_id: placeId, storage_path: path, mime_type: file.type, size_bytes: file.size, alt_text: file.name.replace(/\.[^.]+$/, "").slice(0, 160), sort_order: 0 };
+  const row = { id, owner_id: ownerId, map_id: mapId, place_id: placeId, storage_path: path, mime_type: file.type, size_bytes: file.size, alt_text: file.name.replace(/\.[^.]+$/, "").slice(0, 160), sort_order: 0 };
   const { data, error } = await client.from("place_images").insert(row).select().single();
   if (error || !data) {
     const { error: rollbackError } = await client.storage.from(PRIVATE_IMAGE_BUCKET).remove([path]);
@@ -109,18 +112,20 @@ export async function uploadPlaceImage(client, ownerId, placeId, file, randomUUI
   return data;
 }
 
-export async function updatePlaceImageAlt(client, ownerId, placeId, imageId, altText) {
+export async function updatePlaceImageAlt(client, ownerId, mapId, placeId, imageId, altText) {
   const { data, error } = await client.from("place_images").update({ alt_text: altText.trim().slice(0, 160) })
-    .eq("owner_id", ownerId).eq("place_id", placeId).eq("id", imageId).select().single();
+    .eq("owner_id", ownerId).eq("map_id", mapId).eq("place_id", placeId).eq("id", imageId).select().single();
   if (error || !data) throw imageError("图片说明保存失败", error);
   return data;
 }
 
-export async function deletePlaceImage(client, ownerId, placeId, image) {
-  assertOwnerPlacePath(ownerId, placeId, image.storage_path);
+export async function deletePlaceImage(client, ownerId, mapId, placeId, image) {
+  const legacyCall = image === undefined;
+  if (legacyCall) { image = placeId; placeId = mapId; mapId = "suining"; }
+  assertOwnerPlacePath(ownerId, mapId, placeId, image.storage_path);
   const privateBucket = client.storage.from(PRIVATE_IMAGE_BUCKET);
   const publishedBucket = client.storage.from(PUBLISHED_IMAGE_BUCKET);
-  const publishedPaths = await publishedImagePaths(client, ownerId, placeId, image.id);
+  const publishedPaths = await publishedImagePaths(client, ownerId, mapId, placeId, image.id, legacyCall);
   const backups = [];
   const { data: original, error: downloadError } = await privateBucket.download(image.storage_path);
   if (downloadError || !original) throw imageError("图片删除准备失败", downloadError);
@@ -152,15 +157,15 @@ export async function deletePlaceImage(client, ownerId, placeId, image) {
     const { error: publishedRemoveError } = await publishedBucket.remove(publishedPaths);
     if (publishedRemoveError) await restoreAfterFailure("公开图片副本删除失败", publishedRemoveError);
   }
-  const { data, error } = await client.from("place_images").delete().eq("owner_id", ownerId).eq("place_id", placeId).eq("id", image.id).select("id");
+  const { data, error } = await client.from("place_images").delete().eq("owner_id", ownerId).eq("map_id", mapId).eq("place_id", placeId).eq("id", image.id).select("id");
   if (error || !data?.length) await restoreAfterFailure("图片信息删除失败", error);
 }
 
-export async function cleanupPrivatePlaceImages(client, ownerId, placeId) {
+export async function cleanupPrivatePlaceImages(client, ownerId, mapId, placeId) {
   if (!client.storage) return async () => {};
-  const { data, error } = await client.from("place_images").select("storage_path,mime_type").eq("owner_id", ownerId).eq("place_id", placeId);
+  const { data, error } = await client.from("place_images").select("storage_path,mime_type").eq("owner_id", ownerId).eq("map_id", mapId).eq("place_id", placeId);
   if (error) throw imageError("地点图片清理失败", error);
-  const paths = (data ?? []).map((row) => assertOwnerPlacePath(ownerId, placeId, row.storage_path));
+  const paths = (data ?? []).map((row) => assertOwnerPlacePath(ownerId, mapId, placeId, row.storage_path));
   const backups = [];
   for (const row of data ?? []) {
     const { data: blob, error: downloadError } = await client.storage.from(PRIVATE_IMAGE_BUCKET).download(row.storage_path);
@@ -187,16 +192,19 @@ export async function cleanupPrivatePlaceImages(client, ownerId, placeId) {
 }
 
 // ai coding：地点删除先按 owner/place 读取元数据并备份、清理全部公开副本和私有原图；任一步失败都保留数据库行并暴露待处理路径。
-export async function cleanupPlaceImagesBeforeDelete(client, ownerId, placeId) {
+export async function cleanupPlaceImagesBeforeDelete(client, ownerId, mapId, placeId, legacyPaths = false) {
+  if (placeId === undefined) { placeId = mapId; mapId = "suining"; legacyPaths = true; }
   if (!client.storage) return async () => {};
-  const { data, error } = await client.from("place_images").select("id,storage_path,mime_type").eq("owner_id", ownerId).eq("place_id", placeId);
+  let query = client.from("place_images").select("id,storage_path,mime_type").eq("owner_id", ownerId);
+  if (!legacyPaths) query = query.eq("map_id", mapId);
+  const { data, error } = await query.eq("place_id", placeId);
   if (error) throw cleanupError("地点图片元数据读取失败", error, []);
   const rows = data ?? [];
   if (!rows.length) return async () => {};
 
-  const privatePaths = rows.map((row) => assertOwnerPlacePath(ownerId, placeId, row.storage_path));
+  const privatePaths = rows.map((row) => legacyPaths ? row.storage_path : assertOwnerPlacePath(ownerId, mapId, placeId, row.storage_path));
   const imageIds = new Set(rows.map((row) => String(row.id)));
-  const publishedPaths = (await listPublishedPaths(client, ownerId)).filter((path) => {
+  const publishedPaths = (await listPublishedPaths(client, legacyPaths ? ownerId : `${ownerId}/${mapId}`)).filter((path) => {
     const segments = path.split("/");
     const filename = segments.at(-1) ?? "";
     return segments.at(-2) === placeId && imageIds.has(filename.replace(/\.[^.]+$/, ""));
@@ -247,14 +255,20 @@ export async function cleanupPlaceImagesBeforeDelete(client, ownerId, placeId) {
   return restore;
 }
 
-export async function fetchImagesForPlaces(client, ownerId, placeIds) {
+export async function fetchImagesForPlaces(client, ownerId, mapId, placeIds) {
+  const legacyCall = placeIds === undefined;
+  if (legacyCall) { placeIds = mapId; mapId = "suining"; }
   if (!placeIds.length) return [];
-  const { data, error } = await client.from("place_images").select("*").eq("owner_id", ownerId).in("place_id", placeIds).order("sort_order").order("created_at");
+  let query = client.from("place_images").select("*").eq("owner_id", ownerId);
+  if (!legacyCall) query = query.eq("map_id", mapId);
+  const { data, error } = await query.in("place_id", placeIds).order("sort_order").order("created_at");
   if (error) throw imageError("发布图片读取失败", error);
-  return (data ?? []).map((row) => ({ ...row, storage_path: assertOwnerPlacePath(ownerId, row.place_id, row.storage_path) }));
+  return (data ?? []).map((row) => ({ ...row, storage_path: legacyCall ? assertOwnerPlacePath(ownerId, row.place_id, row.storage_path) : assertOwnerPlacePath(ownerId, mapId, row.place_id, row.storage_path) }));
 }
 
-export async function copyPublishedImages(client, ownerId, _token, releaseId, rows, codec = browserPublicImageCodec) {
+export async function copyPublishedImages(client, ownerId, mapId, _token, releaseId, rows, codec = browserPublicImageCodec) {
+  const legacyCall = Array.isArray(releaseId);
+  if (legacyCall) { codec = rows ?? browserPublicImageCodec; rows = releaseId; releaseId = _token; _token = mapId; mapId = "suining"; }
   const imagesByPlace = {};
   const uploadedPaths = [];
   try {
@@ -262,7 +276,7 @@ export async function copyPublishedImages(client, ownerId, _token, releaseId, ro
       const { data: blob, error: downloadError } = await client.storage.from(PRIVATE_IMAGE_BUCKET).download(row.storage_path);
       if (downloadError || !blob) throw imageError("公开图片副本下载失败", downloadError);
       const cleanBlob = await reencodePublicImage(blob, codec);
-      const publicPath = `${ownerId}/${releaseId}/${row.place_id}/${row.id}.webp`;
+      const publicPath = legacyCall ? `${ownerId}/${releaseId}/${row.place_id}/${row.id}.webp` : `${ownerId}/${mapId}/${releaseId}/${row.place_id}/${row.id}.webp`;
       const { error: uploadError } = await client.storage.from(PUBLISHED_IMAGE_BUCKET).upload(publicPath, cleanBlob, { contentType: "image/webp", upsert: false });
       if (uploadError) throw imageError("公开图片副本上传失败", uploadError);
       uploadedPaths.push(publicPath);
@@ -290,26 +304,39 @@ async function listPublishedPaths(client, prefix, depth = 0) {
   return paths;
 }
 
-export async function cleanupPublishedImages(client, ownerId, token, keepRelease = "") {
-  if (!client.storage || !ownerId || !token) return;
-  const paths = await listPublishedPaths(client, ownerId);
-  const remove = keepRelease ? paths.filter((path) => !path.startsWith(`${ownerId}/${keepRelease}/`)) : paths;
+export async function cleanupPublishedImages(client, ownerId, mapId, token, keepRelease = "") {
+  const legacyCall = arguments.length < 5;
+  if (legacyCall) { keepRelease = token ?? ""; token = mapId; mapId = "suining"; }
+  if (!client.storage || !ownerId || !mapId || !token) return;
+  const prefix = legacyCall ? ownerId : `${ownerId}/${mapId}`;
+  const scopedPaths = await listPublishedPaths(client, prefix);
+  const legacyPaths = !legacyCall && mapId === "suining"
+    ? (await listPublishedPaths(client, ownerId)).filter((path) => path.split("/").length === 4)
+    : [];
+  const paths = [...new Set([...scopedPaths, ...legacyPaths])];
+  const remove = keepRelease ? paths.filter((path) => !path.startsWith(`${prefix}/${keepRelease}/`)) : paths;
   if (remove.length) {
     const { error } = await client.storage.from(PUBLISHED_IMAGE_BUCKET).remove(remove);
     if (error) throw cleanupError("旧公开图片清理失败", error, remove);
   }
 }
 
-export async function cleanupPublishedImageCopies(client, ownerId, placeId, imageId) {
+export async function cleanupPublishedImageCopies(client, ownerId, mapId, placeId, imageId) {
+  const legacyCall = imageId === undefined;
+  if (legacyCall) { imageId = placeId; placeId = mapId; mapId = "suining"; }
   if (!client.storage) return;
-  const remove = await publishedImagePaths(client, ownerId, placeId, imageId);
+  const remove = await publishedImagePaths(client, ownerId, mapId, placeId, imageId, legacyCall);
   if (!remove.length) return;
   const { error } = await client.storage.from(PUBLISHED_IMAGE_BUCKET).remove(remove);
   if (error) throw cleanupError("公开图片副本删除失败", error, remove);
 }
 
-async function publishedImagePaths(client, ownerId, placeId, imageId) {
-  const paths = await listPublishedPaths(client, ownerId);
+async function publishedImagePaths(client, ownerId, mapId, placeId, imageId, legacy = false) {
+  const scoped = await listPublishedPaths(client, legacy ? ownerId : `${ownerId}/${mapId}`);
+  const legacyPaths = !legacy && mapId === "suining"
+    ? (await listPublishedPaths(client, ownerId)).filter((path) => path.split("/").length === 4)
+    : [];
+  const paths = [...new Set([...scoped, ...legacyPaths])];
   const suffix = `/${placeId}/${imageId}`;
   return paths.filter((path) => path.slice(0, path.lastIndexOf(".")).endsWith(suffix));
 }

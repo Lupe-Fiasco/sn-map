@@ -20,6 +20,18 @@ test("keeps drafts and sync baselines isolated by owner", () => {
   assert.throws(() => readDraft("", storage), /owner/);
 });
 
+test("keeps the same owner's drafts and baselines isolated by map", () => {
+  const storage = memoryStorage();
+  const suining = { type: "FeatureCollection", features: [{ id: "s" }] };
+  const xuhui = { type: "FeatureCollection", features: [{ id: "x" }] };
+  writeDraft("owner-a", suining, storage, "suining");
+  writeDraft("owner-a", xuhui, storage, "xuhui");
+  writeSyncBaseline("owner-a", suining, storage, "suining");
+  assert.deepEqual(readDraft("owner-a", storage, "suining"), suining);
+  assert.deepEqual(readDraft("owner-a", storage, "xuhui"), xuhui);
+  assert.equal(readSyncBaseline("owner-a", storage, "xuhui"), null);
+});
+
 test("legacy draft and baseline are claimed once by the first owner", () => {
   const storage = memoryStorage();
   const legacyDraft = { type: "FeatureCollection", features: [{ id: "legacy" }] };

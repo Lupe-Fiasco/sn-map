@@ -10,6 +10,68 @@ const approvalMigrationUrl = new URL("../supabase/migrations/202609170005_create
 const imagesMigrationUrl = new URL("../supabase/migrations/202609170006_create_place_images.sql", import.meta.url);
 const hardenedImagesMigrationUrl = new URL("../supabase/migrations/202609180007_harden_published_images.sql", import.meta.url);
 const snapshotLevelsMigrationUrl = new URL("../supabase/migrations/202609200008_enforce_snapshot_levels.sql", import.meta.url);
+const mapsMigrationUrl = new URL("../supabase/migrations/202609210009_add_maps_multiregion.sql", import.meta.url);
+const storageCrudMigrationUrl = new URL("../supabase/migrations/202609220010_harden_storage_map_crud.sql", import.meta.url);
+
+test("storage CRUD migration binds every object operation to map and place metadata", async () => {
+  const sql = await readFile(storageCrudMigrationUrl, "utf8");
+  const policy = (name) => sql.slice(sql.indexOf(`create policy "${name}"`), sql.indexOf(";", sql.indexOf(`create policy "${name}"`)) + 1);
+
+  // ai coding：静态守卫逐项锁定私有/公开对象的 map、place、image 关联，以及匿名账号写访问禁令。
+  for (const operation of ["select", "update", "delete"]) {
+    const privateSql = policy(`private_place_images_${operation}_own`);
+    assert.match(privateSql, /from public\.place_images image/);
+    assert.match(privateSql, /image\.storage_path = name/);
+    assert.match(privateSql, /split_part\(name, '\/', 2\) = image\.map_id/);
+    assert.match(privateSql, /split_part\(name, '\/', 3\) = image\.place_id/);
+    assert.match(privateSql, /image\.map_id = 'suining'/);
+    assert.match(privateSql, /is_anonymous/);
+    assert.match(privateSql, /public\.is_approved\(\)/);
+  }
+  for (const operation of ["select", "update", "delete"]) {
+    const publicSql = policy(`published_place_images_${operation}_own`);
+    assert.match(publicSql, /from public\.place_images image/);
+    assert.match(publicSql, /split_part\(name, '\/', 2\) = image\.map_id/);
+    assert.match(publicSql, /split_part\(name, '\/', 4\) = image\.place_id/);
+    assert.match(publicSql, /split_part\(name, '\/', 5\) = image\.id::text \|\| '\.webp'/);
+    assert.match(publicSql, /image\.map_id = 'suining'/);
+    assert.match(publicSql, /is_anonymous/);
+    assert.doesNotMatch(publicSql, /to anon/);
+  }
+  assert.match(policy("private_place_images_insert_own"), /from public\.places place[\s\S]*place\.map_id = split_part\(name, '\/', 2\)[\s\S]*place\.id = split_part\(name, '\/', 3\)/);
+  const privateDelete = policy("private_place_images_delete_own");
+  // ai coding：孤儿补偿例外只存在于 private DELETE，并继续绑定非匿名已审核本人及其 owner/map/place。
+  assert.match(privateDelete, /not exists \(select 1 from public\.place_images image where image\.storage_path = name\)/);
+  assert.match(privateDelete, /split_part\(name, '\/', 1\) = \(select auth\.uid\(\)\)::text/);
+  assert.match(privateDelete, /from public\.places place where place\.owner_id = \(select auth\.uid\(\)\)[\s\S]*place\.map_id = split_part\(name, '\/', 2\)[\s\S]*place\.id = split_part\(name, '\/', 3\)/);
+  assert.match(privateDelete, /place\.map_id = 'suining' and place\.id = split_part\(name, '\/', 2\)/);
+  assert.match(privateDelete, /split_part\(split_part\(name, '\/', 4\), '\.', 1\) = image\.id::text/);
+  for (const operation of ["select", "update"]) assert.doesNotMatch(policy(`private_place_images_${operation}_own`), /not exists \(select 1 from public\.place_images/);
+  for (const operation of ["select", "insert", "update", "delete"]) assert.doesNotMatch(policy(`published_place_images_${operation}_own`), /not exists \(select 1 from public\.place_images/);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("maps migration backfills existing data and installs owner plus map isolation", async () => {
+  const [sql, placeImages] = await Promise.all([
+    readFile(mapsMigrationUrl, "utf8"),
+    readFile(new URL("../src/services/placeImages.js", import.meta.url), "utf8"),
+  ]);
+  assert.ok(sql.indexOf("migration 009 已停止") < sql.indexOf("create table public.maps"));
+  assert.match(sql, /update public\.places set map_id = 'suining'/);
+  assert.match(sql, /primary key \(owner_id, map_id, id\)/);
+  assert.match(sql, /primary key \(owner_id, map_id\)/);
+  assert.match(sql, /foreign key \(owner_id, map_id, place_id\)/);
+  assert.match(sql, /returns table\(title text, published_at timestamptz, map_config jsonb, snapshot jsonb\)/);
+  assert.match(sql, /source_image\.map_id=m\.map_id/);
+  // ai coding：Storage policy 必须与客户端四/五段路径同步，并通过数据库关系约束 map/place/image，不能只检查 owner 前缀。
+  assert.match(placeImages, /`\$\{ownerId\}\/\$\{mapId\}\/\$\{placeId\}\/\$\{id\}\.\$\{extensionFor\(file\.type\)\}`/);
+  assert.match(placeImages, /`\$\{ownerId\}\/\$\{mapId\}\/\$\{releaseId\}\/\$\{row\.place_id\}\/\$\{row\.id\}\.webp`/);
+  assert.match(sql, /private_place_images_insert_own[\s\S]*p\.map_id=split_part\(name,'\/',2\)[\s\S]*p\.id=split_part\(name,'\/',3\)/);
+  assert.match(sql, /p\.map_id='suining' and p\.id=split_part\(name,'\/',2\)/);
+  assert.match(sql, /published_place_images_insert_own[\s\S]*source_image\.map_id=split_part\(name,'\/',2\)[\s\S]*source_image\.place_id=split_part\(name,'\/',4\)/);
+  assert.match(sql, /is_anonymous'[\s\S]*public\.is_approved\(\)/);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
 
 test("places upgrade migration protects ownership and installs the owner-scoped conflict key", async () => {
   const [createSql, sql] = await Promise.all([

@@ -3,31 +3,33 @@ export function serializePlaces(places) {
 }
 
 // ai coding：文件句柄只保存在当前页面的 JavaScript 会话中，组件重渲染或卸载不会丢失，刷新后自然清空。
-let sessionFileHandle = null;
+const sessionFileHandles = new Map();
 
-export function getSessionFileHandle() {
-  return sessionFileHandle;
+export function getSessionFileHandle(mapId = "suining") {
+  return sessionFileHandles.get(mapId) ?? null;
 }
 
-export function rememberSessionFileHandle(fileHandle) {
-  sessionFileHandle = fileHandle;
+export function rememberSessionFileHandle(fileHandle, mapId = "suining") {
+  sessionFileHandles.set(mapId, fileHandle);
 }
 
-export function forgetSessionFileHandle() {
-  sessionFileHandle = null;
+export function forgetSessionFileHandle(mapId) {
+  if (mapId) sessionFileHandles.delete(mapId);
+  else sessionFileHandles.clear();
 }
 
 export function isFileHandleUnavailable(error) {
   return ["NotAllowedError", "SecurityError", "NotFoundError", "InvalidStateError"].includes(error?.name);
 }
 
-export async function writePlacesFile({ places, fileHandle, pickFile, confirmWrite }) {
+export async function writePlacesFile({ places, fileHandle, pickFile, confirmWrite, mapSlug = "suining" }) {
   let handle = fileHandle;
   let writable;
   if (!handle) {
     [handle] = await pickFile({
       multiple: false,
-      types: [{ description: "GeoJSON 地点文件（请选择 places.geojson）", accept: { "application/geo+json": [".geojson"], "application/json": [".json"] } }],
+      suggestedName: `${mapSlug}-places.geojson`,
+      types: [{ description: `GeoJSON 地点文件（${mapSlug}）`, accept: { "application/geo+json": [".geojson"], "application/json": [".json"] } }],
     });
     // ai coding：选择器返回时保留用户激活：确认对话框之前立即获取 writable，且绝不读取文件。
     writable = await handle.createWritable();

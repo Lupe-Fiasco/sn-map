@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   assertOwnerPlacePath, cleanupPlaceImagesBeforeDelete, cleanupPublishedImageCopies, cleanupPublishedImages, copyPublishedImages, deletePlaceImage, MAX_IMAGE_BYTES,
-  MAX_PUBLIC_IMAGE_DIMENSION, PUBLIC_IMAGE_QUALITY, reencodePublicImage, validateImageFile,
+  MAX_PUBLIC_IMAGE_DIMENSION, PUBLIC_IMAGE_QUALITY, reencodePublicImage, uploadPlaceImage, validateImageFile,
 } from "../src/services/placeImages.js";
 
 function placeCleanupClient({ failPublishedRemove = false, failPrivateRemove = false } = {}) {
@@ -35,6 +35,32 @@ test("requires private paths to match the explicit owner and place", () => {
   assert.equal(assertOwnerPlacePath("owner-a", "place-1", "owner-a/place-1/image.webp"), "owner-a/place-1/image.webp");
   assert.throws(() => assertOwnerPlacePath("owner-a", "place-1", "owner-b/place-1/image.webp"), /不匹配/);
   assert.throws(() => assertOwnerPlacePath("owner-a", "place-1", "owner-a/place-2/image.webp"), /不匹配/);
+});
+
+test("requires new image paths to include the current map", () => {
+  assert.equal(assertOwnerPlacePath("owner-a", "xuhui", "place-1", "owner-a/xuhui/place-1/image.webp"), "owner-a/xuhui/place-1/image.webp");
+  assert.throws(() => assertOwnerPlacePath("owner-a", "xuhui", "place-1", "owner-a/suining/place-1/image.webp"), /地图或地点不匹配/);
+});
+
+test("metadata insert failure removes the uploaded private object as compensation", async () => {
+  const calls = [];
+  const bucket = {
+    upload: async (path) => { calls.push(["upload", path]); return { error: null }; },
+    remove: async (paths) => { calls.push(["remove", paths]); return { error: null }; },
+  };
+  const insert = { select() { return this; }, single: async () => ({ data: null, error: { message: "metadata rejected" } }) };
+  const client = {
+    storage: { from: (name) => { assert.equal(name, "place-images"); return bucket; } },
+    from: (name) => { assert.equal(name, "place_images"); return { insert: () => insert }; },
+  };
+  const file = { type: "image/jpeg", size: 12, name: "现场.jpg" };
+
+  // ai coding：锁定 upload 成功、metadata 失败后立即 remove 同一 owner/map/place 路径的补偿流程。
+  await assert.rejects(uploadPlaceImage(client, "owner-a", "xuhui", "place-1", file, () => "image-1"), /图片信息保存失败：metadata rejected/);
+  assert.deepEqual(calls, [
+    ["upload", "owner-a/xuhui/place-1/image-1.jpg"],
+    ["remove", ["owner-a/xuhui/place-1/image-1.jpg"]],
+  ]);
 });
 
 test("public image processing always returns a bounded clean WebP through the injected codec", async () => {

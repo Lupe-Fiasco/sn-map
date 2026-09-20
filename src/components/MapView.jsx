@@ -210,6 +210,8 @@ function createEditVertexIcon() {
 
 export default function MapView({
     bounds,
+    mapName = "当前地区",
+    baseRoadsPath,
     places,
     types,
     selectedId,
@@ -313,7 +315,8 @@ export default function MapView({
 
         let roadLayer;
         let cancelled = false;
-        fetch("/data/base-roads.geojson")
+        // ai coding：道路请求绑定当前 map；父层以 map id 重建实例后，旧请求只会被取消而不能落入新地区。
+        fetch(baseRoadsPath)
             .then((response) => {
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 return response.json();
@@ -361,7 +364,7 @@ export default function MapView({
             mapRef.current = null;
             layersRef.current = null;
         };
-    }, [bounds, onRoadStatus, readOnly]);
+    }, [bounds, baseRoadsPath, onRoadStatus, readOnly]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -622,7 +625,7 @@ export default function MapView({
             ref={containerRef}
             id="map"
             role="application"
-            aria-label={readOnly ? "睢宁县公开快照只读地图" : "睢宁县交互地图"}
+            aria-label={readOnly ? `${mapName}公开快照只读地图` : `${mapName}交互地图`}
         />
     );
 }
