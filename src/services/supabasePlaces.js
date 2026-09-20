@@ -1,4 +1,5 @@
 import { emptyCollection, getPolygonRepresentativeCoordinate, validatePlaces } from "./geojson.js";
+import { cleanupPlaceImagesBeforeDelete } from "./placeImages.js";
 
 export function featureToPlaceRow(feature, ownerId) {
   const properties = structuredClone(feature.properties ?? {});
@@ -130,7 +131,19 @@ export async function saveCloudPlaceToCollection(client, collection, feature, ow
 }
 
 export async function deleteCloudPlace(client, id, ownerId) {
+  // ai coding：数据库行删除前清理该 owner/place 的公开副本与私有原图；失败时保留地点和图片元数据。
+  const restoreImages = await cleanupPlaceImagesBeforeDelete(client, ownerId, id);
   const { data, error } = await client.from("places").delete().eq("owner_id", ownerId).eq("id", id).select("id");
-  if (error) throw new Error(`云端删除失败：${error.message}`);
-  if (!data?.length) throw new Error("云端删除失败：地点不存在或无权删除");
+  if (error || !data?.length) {
+    const deleteMessage = error ? `云端删除失败：${error.message}` : "云端删除失败：地点不存在或无权删除";
+    try {
+      await restoreImages();
+    } catch (restoreError) {
+      // ai coding：数据库删除与图片恢复双重失败时保留原始失败语义，并暴露需要人工处理的对象路径。
+      const failure = new Error(`${deleteMessage}；${restoreError.message || "地点图片恢复失败"}`);
+      failure.pendingCleanupPaths = restoreError.pendingCleanupPaths ?? [];
+      throw failure;
+    }
+    throw new Error(deleteMessage);
+  }
 }

@@ -7,6 +7,9 @@ const createMigrationUrl = new URL("../supabase/migrations/202609170001_create_p
 const snapshotsMigrationUrl = new URL("../supabase/migrations/202609170003_create_map_snapshots.sql", import.meta.url);
 const secureSnapshotsMigrationUrl = new URL("../supabase/migrations/202609170004_secure_public_snapshot_access.sql", import.meta.url);
 const approvalMigrationUrl = new URL("../supabase/migrations/202609170005_create_profiles_approval.sql", import.meta.url);
+const imagesMigrationUrl = new URL("../supabase/migrations/202609170006_create_place_images.sql", import.meta.url);
+const hardenedImagesMigrationUrl = new URL("../supabase/migrations/202609180007_harden_published_images.sql", import.meta.url);
+const snapshotLevelsMigrationUrl = new URL("../supabase/migrations/202609200008_enforce_snapshot_levels.sql", import.meta.url);
 
 test("places upgrade migration protects ownership and installs the owner-scoped conflict key", async () => {
   const [createSql, sql] = await Promise.all([
@@ -32,6 +35,66 @@ test("places upgrade migration protects ownership and installs the owner-scoped 
   assert.ok(sql.indexOf("旧表必要列缺失或类型不符") < sql.indexOf("alter table public.places drop constraint"));
   assert.match(sql, /'longitude', 'double precision'::regtype::oid/);
   assert.match(sql, /owner_id 缺少指向 auth\.users\(id\)/);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("place images migration installs only rerun-safe foundational image objects", async () => {
+  const sql = await readFile(imagesMigrationUrl, "utf8");
+  // ai coding：006 禁止覆盖 007 独占的最终 bucket、policy、约束和 RPC。
+  assert.match(sql, /create table if not exists public\.place_images/);
+  assert.match(sql, /foreign key \(owner_id, place_id\)[\s\S]*references public\.places\(owner_id, id\) on delete cascade/);
+  assert.doesNotMatch(sql, /foreign key \(place_id\)/);
+  assert.match(sql, /'place-images', 'place-images', false/);
+  assert.match(sql, /'published-place-images', 'published-place-images', false, 5242880, array\['image\/webp'\][\s\S]*on conflict \(id\) do nothing/);
+  assert.match(sql, /storage\.foldername\(name\)\)\[1\] = \(select auth\.uid\(\)\)::text/);
+  assert.match(sql, /is_anonymous/);
+  assert.doesNotMatch(sql, /published_place_images_(select|insert|update|delete)_own/);
+  assert.doesNotMatch(sql, /map_snapshots_public_fields_check|get_public_map_snapshot|grant select[^;]+anon/i);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("published image hardening rejects anonymous manifests and rebuilds only verified WebP objects", async () => {
+  const sql = await readFile(hardenedImagesMigrationUrl, "utf8");
+  // ai coding：007 必须可追加到已执行 006 的环境，历史行默认禁用图片且访客仍无表 SELECT。
+  assert.match(sql, /image_manifest_version smallint not null default 0/);
+  assert.match(sql, /public_fields <@ array\['name', 'type', 'coordinates', 'notes', 'images'\]/);
+  assert.match(sql, /map_snapshots_insert_own[\s\S]*is_anonymous[\s\S]*image_manifest_version = 1/);
+  assert.match(sql, /map_snapshots_update_own[\s\S]*is_anonymous[\s\S]*image_manifest_version = 1/);
+  assert.match(sql, /allowed_mime_types = array\['image\/webp'\]/);
+  assert.match(sql, /published_place_images_insert_own[\s\S]*metadata->>'mimetype'[\s\S]*image\/webp/);
+  assert.match(sql, /join public\.place_images source_image/);
+  assert.match(sql, /join storage\.objects stored[\s\S]*stored\.bucket_id = 'published-place-images'/);
+  assert.match(sql, /split_part\(stored\.name, '\/', 1\) = m\.owner_id::text/);
+  assert.match(sql, /split_part\(stored\.name, '\/', 3\) = coalesce/);
+  assert.match(sql, /split_part\(stored\.name, '\/', 4\) = \(image->>'id'\) \|\| '\.webp'/);
+  assert.match(sql, /'url', '\/storage\/v1\/object\/public\/published-place-images\/' \|\| stored\.name/);
+  assert.match(sql, /'notes', feature #> '\{properties,notes\}'[\s\S]*'address', feature #> '\{properties,address\}'[\s\S]*'phone', feature #> '\{properties,phone\}'[\s\S]*'website', feature #> '\{properties,website\}'[\s\S]*'opening_hours', feature #> '\{properties,opening_hours\}'/);
+  assert.doesNotMatch(sql, /jsonb_build_object\([^)]*owner_id|jsonb_build_object\([^)]*token/i);
+  assert.doesNotMatch(sql, /image->'url'|image->>'url'/);
+  assert.doesNotMatch(sql, /grant select[^;]+anon/i);
+  assert.doesNotMatch(sql, /service_role/i);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("snapshot level migration blocks legacy snapshot and republication bypasses while allowing atomic upgrades", async () => {
+  const sql = await readFile(snapshotLevelsMigrationUrl, "utf8");
+  // ai coding：静态守卫锁定 REST 可利用的 snapshot/is_public 路径，同时保留一次性合法升级与取消公开。
+  assert.match(sql, /publication_level = 'basic' and public_fields = array\['name', 'type', 'coordinates'\]/);
+  assert.match(sql, /publication_level = 'details' and public_fields = array\['name', 'type', 'coordinates', 'notes'\]/);
+  assert.match(sql, /publication_level = 'images' and public_fields = array\['name', 'type', 'coordinates', 'notes', 'images'\]/);
+  assert.match(sql, /if tg_op = 'INSERT'[\s\S]*new snapshots require a valid publication_level/);
+  assert.match(sql, /if new\.publication_level in \('basic', 'details', 'images'\)[\s\S]*public_fields does not match publication_level[\s\S]*return new/);
+  assert.match(sql, /old\.publication_level is not null[\s\S]*new\.publication_level is not null/);
+  assert.match(sql, /new\.snapshot is distinct from old\.snapshot/);
+  assert.match(sql, /new\.public_fields is distinct from old\.public_fields/);
+  assert.match(sql, /new\.share_token is distinct from old\.share_token/);
+  assert.match(sql, /new\.image_manifest_version is distinct from old\.image_manifest_version/);
+  assert.match(sql, /old\.is_public = false and new\.is_public = true/);
+  assert.match(sql, /legacy snapshot and public_fields are immutable; republish with a valid level/);
+  assert.match(sql, /when p_level is null then array\[\]::text\[\]/);
+  assert.match(sql, /snapshot_allowed_public_fields\(m\.publication_level, m\.public_fields\)/);
+  assert.match(sql, /join public\.place_images source_image[\s\S]*join storage\.objects stored/);
+  assert.doesNotMatch(sql, /grant select[^;]+anon/i);
   assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
 });
 

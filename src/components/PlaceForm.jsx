@@ -1,6 +1,7 @@
 import { useState } from "react";
 import TypeSelect from "./TypeSelect.jsx";
 import { validatePolygonGeometry } from "../services/geojson.js";
+import PlaceImages from "./PlaceImages.jsx";
 
 const initialValues = (feature, coordinates) => ({
   name: feature?.properties.name ?? "", type: feature?.properties.type ?? "",
@@ -8,7 +9,7 @@ const initialValues = (feature, coordinates) => ({
   address: feature?.properties.address ?? "", phone: feature?.properties.phone ?? "", description: feature?.properties.description ?? "",
 });
 
-export default function PlaceForm({ feature, initialCoordinates, geometry, types, bounds, disabled, onSave, onCancel, onCoordinatesChange }) {
+export default function PlaceForm({ feature, ownerId, initialCoordinates, geometry, types, bounds, disabled, onSave, onCancel, onCoordinatesChange }) {
   const areaGeometry = geometry ?? (feature?.geometry.type === "Polygon" ? feature.geometry : null);
   const [values, setValues] = useState(() => initialValues(feature, initialCoordinates));
   const [error, setError] = useState("");
@@ -50,6 +51,7 @@ export default function PlaceForm({ feature, initialCoordinates, geometry, types
     <label>地址<input name="address" maxLength="160" value={values.address} onChange={update} /></label>
     <label>电话<input name="phone" type="tel" maxLength="40" value={values.phone} onChange={update} /></label>
     <label>备注<textarea name="description" rows="3" maxLength="500" value={values.description} onChange={update} /></label>
+    {feature ? <PlaceImages ownerId={ownerId} placeId={feature.id} disabled={disabled} /> : <p className="form-help">保存地点后即可上传实景图片。</p>}
     <div className="form-actions"><button className="button primary" type="submit" disabled={disabled}>保存{areaGeometry ? "区域" : "地点"}</button><button className="button" type="button" onClick={onCancel}>取消</button></div>
   </form>;
 }

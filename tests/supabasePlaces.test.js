@@ -75,6 +75,84 @@ test("maps reads and deletes to the current owner in addition to RLS", async () 
   ]);
 });
 
+test("reports every failed image restore path when the place delete also fails", async () => {
+  const uploads = [];
+  const imageRows = [
+    { storage_path: "owner-a/point-1/one.webp", mime_type: "image/webp" },
+    { storage_path: "owner-a/point-1/two.jpg", mime_type: "image/jpeg" },
+  ];
+  const imageQuery = {
+    eq() { return this; },
+    then(resolve) { return Promise.resolve(resolve({ data: imageRows, error: null })); },
+  };
+  const client = {
+    from: (table) => table === "place_images" ? { select: () => imageQuery } : {
+      delete: () => ({ eq() { return this; }, select: async () => ({ data: null, error: { message: "database unavailable" } }) }),
+    },
+    storage: { from: () => ({
+      list: async () => ({ data: [], error: null }),
+      download: async () => ({ data: new Blob(["backup"], { type: "image/webp" }), error: null }),
+      remove: async () => ({ error: null }),
+      upload: async (path) => {
+        uploads.push(path);
+        return { error: path.endsWith("one.webp") ? { message: "restore denied" } : null };
+      },
+    }) },
+  };
+
+  await assert.rejects(deleteCloudPlace(client, "point-1", "owner-a"), (error) =>
+    /云端删除失败：database unavailable.*地点图片恢复失败：restore denied/.test(error.message)
+      && error.pendingCleanupPaths?.[0] === "owner-a/point-1/one.webp");
+  assert.deepEqual(uploads, ["owner-a/point-1/one.webp", "owner-a/point-1/two.jpg"]);
+});
+
+test("deletes a place row only after its public and private image objects are cleaned", async () => {
+  const events = [];
+  const imageRows = [{ id: "image-1", storage_path: "owner-a/point-1/image-1.jpg", mime_type: "image/jpeg" }];
+  const imageQuery = { eq() { return this; }, then(resolve) { return Promise.resolve(resolve({ data: imageRows, error: null })); } };
+  const listTree = {
+    "owner-a": [{ name: "release", id: null }],
+    "owner-a/release": [{ name: "point-1", id: null }],
+    "owner-a/release/point-1": [{ name: "image-1.webp", id: "stored" }],
+  };
+  const client = {
+    from: (table) => table === "place_images" ? { select: () => imageQuery } : {
+      delete: () => ({ eq() { return this; }, select: async () => { events.push("place-delete"); return { data: [{ id: "point-1" }], error: null }; } }),
+    },
+    storage: { from: (bucket) => ({
+      list: async (prefix) => ({ data: listTree[prefix] ?? [], error: null }),
+      download: async () => ({ data: new Blob([bucket]), error: null }),
+      remove: async () => { events.push(`${bucket}-remove`); return { error: null }; },
+      upload: async () => ({ error: null }),
+    }) },
+  };
+
+  await deleteCloudPlace(client, "point-1", "owner-a");
+  assert.deepEqual(events, ["published-place-images-remove", "place-images-remove", "place-delete"]);
+});
+
+test("does not delete the place or metadata when public image cleanup fails", async () => {
+  let placeDeleteCalls = 0;
+  const rows = [{ id: "image-1", storage_path: "owner-a/point-1/image-1.jpg", mime_type: "image/jpeg" }];
+  const query = { eq() { return this; }, then(resolve) { return Promise.resolve(resolve({ data: rows, error: null })); } };
+  const client = {
+    from: (table) => table === "place_images" ? { select: () => query } : {
+      delete: () => { placeDeleteCalls += 1; return { eq() { return this; }, select: async () => ({ data: [], error: null }) }; },
+    },
+    storage: { from: (bucket) => ({
+      list: async (prefix) => ({ data: prefix === "owner-a" ? [{ name: "release", id: null }] : prefix === "owner-a/release" ? [{ name: "point-1", id: null }] : [{ name: "image-1.webp", id: "stored" }], error: null }),
+      download: async () => ({ data: new Blob([bucket]), error: null }),
+      remove: async () => ({ error: bucket === "published-place-images" ? { message: "remove denied" } : null }),
+      upload: async () => ({ error: null }),
+    }) },
+  };
+
+  await assert.rejects(deleteCloudPlace(client, "point-1", "owner-a"), (error) =>
+    /请重试.*人工清理/.test(error.message)
+      && error.pendingCleanupPaths.includes("owner-a/release/point-1/image-1.webp"));
+  assert.equal(placeDeleteCalls, 0);
+});
+
 test("isolates an invalid cloud row while retaining valid rows", () => {
   const validRow = featureToPlaceRow(point, "owner-1");
   const invalidRow = {

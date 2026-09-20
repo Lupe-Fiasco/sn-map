@@ -414,7 +414,7 @@ function ApprovedManagementApp({ auth }) {
                     )}
                 </section>
                     {/* ai coding：owner 切换时同步重建卡片，首帧不复用上一账号的本地 UI 状态。 */}
-                    <SnapshotCard key={auth.session?.user?.id ?? "no-owner"} ownerId={auth.session?.user?.id} places={places} cloud={cloud} />
+                    <SnapshotCard key={auth.session?.user?.id ?? "no-owner"} ownerId={auth.session?.user?.id} imagesEnabled={!auth.session?.user?.is_anonymous && (auth.access.state === "approved" || auth.access.isAdmin)} places={places} cloud={cloud} />
                 </div>
                 <aside className="info-panel" aria-label="地点维护面板">
                     {auth.access.isAdmin && <AdminPanel key={auth.access.ownerId} ownerId={auth.access.ownerId} />}
@@ -471,6 +471,7 @@ function ApprovedManagementApp({ auth }) {
                                     feature={
                                         mode === "editing" ? selected : null
                                     }
+                                    ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
                                     initialCoordinates={newCoordinates}
                                     geometry={mode === "editing" ? editGeometry : newGeometry}
                                     types={types}
@@ -488,6 +489,7 @@ function ApprovedManagementApp({ auth }) {
                         {mode === "details" && selected && (
                             <PlaceDetails
                                 feature={selected}
+                                ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
                                 type={types.find(
                                     (type) =>
                                         type.id === selected.properties.type,

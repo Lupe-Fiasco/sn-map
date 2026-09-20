@@ -35,6 +35,7 @@ npm run build:map-data
 - 正式邮箱账号和匿名 Supabase session 均由浏览器持久化；注册/登录不自动迁移匿名 owner 数据。清空浏览器站点存储会创建新的匿名用户，原匿名用户的数据不会自动迁移。
 - 正式邮箱账号须先确认邮箱、再由 `admin_users` 中的管理员人工批准；pending/rejected 不得进入管理端，且 places/map_snapshots owner RLS 同步执行审核门禁。匿名兼容账号继续可用。管理员只通过数据库 user_id bootstrap，禁止在代码或 migration 写入管理员邮箱。
 - `map_snapshots` 保存用户发布时的完整正式 FeatureCollection；私有地点编辑不自动更新快照。公开分享页只读 `is_public=true` 数据，不初始化匿名登录，不展示任何管理操作；本地文件仍只是当前私有地点的手动镜像。
+- 实景原图只存私有 `place-images` bucket 和 `place_images` 元数据，不进入 GeoJSON。执行 migration 006 后，仅已审核正式账号/管理员可管理自己的图片；发布时只有明确勾选 `images` 才生成公开副本并进入脱敏快照。重新发布或撤销公开应清理旧副本，但已缓存或复制的 URL 无法绝对收回。
 
 <!-- ai coding -->
 ## 部署镜像同步
@@ -48,6 +49,9 @@ npm run build:map-data
 ## 验证约定
 
 默认先运行 `npm test` 和 `npm run build`，并做静态检查。默认不使用 chrome-devtools；仅当存在无法由代码、测试或构建判断的用户可见问题时再使用浏览器工具。桌面 Web 是当前验证范围。
+<!-- ai coding -->
+- 所有覆盖地图的全屏弹层、确认框和预览层必须挂载到 `document.body` 或隔离的顶层 overlay root，禁止嵌套在 Leaflet 或卡片的 stacking context 中；不得仅靠提高 `z-index` 规避层叠问题。
+- 桌面验证全屏弹层时，必须检查 Leaflet 地图及其控件不会显示在弹层之上，也不会穿透弹层接收点击。
 <!-- ai coding -->
 仅验证桌面 Web；禁止切换或模拟移动端视口，不做移动端验收，除非用户明确要求。
 

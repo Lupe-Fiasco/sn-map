@@ -4,50 +4,26 @@
   "features": [
     {
       "type": "Feature",
-      "id": "5d699f0c-720d-4683-b02f-e4bf7cd43494",
+      "id": "a6aafbbd-b907-442a-94dd-b58cce1925da",
       "geometry": {
         "type": "Point",
         "coordinates": [
-          117.936344,
-          33.912704
+          117.935958,
+          33.915393
         ]
       },
       "properties": {
-        "id": "5d699f0c-720d-4683-b02f-e4bf7cd43494",
-        "name": "云河公园",
-        "type": "park",
-        "phone": "",
-        "source": "user",
-        "address": "永康路1号",
-        "latitude": 33.912704,
-        "createdAt": "2026-09-18T01:39:26.749641+00:00",
-        "longitude": 117.936344,
-        "updatedAt": "2026-09-18T03:21:54.094132+00:00",
-        "description": "水秀天桥、荷花池、喷泉、国旗"
-      }
-    },
-    {
-      "type": "Feature",
-      "id": "4464092d-012f-44bf-a98f-357fcfaf6f4c",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          117.936859,
-          33.909687
-        ]
-      },
-      "properties": {
-        "id": "4464092d-012f-44bf-a98f-357fcfaf6f4c",
-        "name": "红叶小区",
-        "type": "residential",
+        "id": "a6aafbbd-b907-442a-94dd-b58cce1925da",
+        "name": "睢宁县政府",
+        "type": "government",
         "phone": "",
         "source": "user",
         "address": "",
+        "latitude": 33.915393,
         "createdAt": "2026-09-18T01:39:26.749641+00:00",
-        "updatedAt": "2026-09-18T01:39:26.748847+00:00",
-        "description": "陈少爷HOME",
-        "longitude": 117.936859,
-        "latitude": 33.909687
+        "longitude": 117.935958,
+        "updatedAt": "2026-09-18T03:22:01.490646+00:00",
+        "description": "人杰地灵"
       }
     },
     {
@@ -72,30 +48,6 @@
         "description": "雷帝HOME",
         "longitude": 117.940893,
         "latitude": 33.913533
-      }
-    },
-    {
-      "type": "Feature",
-      "id": "a6aafbbd-b907-442a-94dd-b58cce1925da",
-      "geometry": {
-        "type": "Point",
-        "coordinates": [
-          117.935958,
-          33.915393
-        ]
-      },
-      "properties": {
-        "id": "a6aafbbd-b907-442a-94dd-b58cce1925da",
-        "name": "睢宁县政府",
-        "type": "government",
-        "phone": "",
-        "source": "user",
-        "address": "",
-        "latitude": 33.915393,
-        "createdAt": "2026-09-18T01:39:26.749641+00:00",
-        "longitude": 117.935958,
-        "updatedAt": "2026-09-18T03:22:01.490646+00:00",
-        "description": "人杰地灵"
       }
     },
     {
@@ -216,6 +168,54 @@
         "description": "",
         "longitude": 117.946590185165,
         "latitude": 33.9021911444527
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "5d699f0c-720d-4683-b02f-e4bf7cd43494",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.936344,
+          33.912704
+        ]
+      },
+      "properties": {
+        "id": "5d699f0c-720d-4683-b02f-e4bf7cd43494",
+        "name": "云河公园",
+        "type": "park",
+        "phone": "",
+        "source": "user",
+        "address": "永康路1号",
+        "latitude": 33.912704,
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "longitude": 117.936344,
+        "updatedAt": "2026-09-18T03:21:54.094132+00:00",
+        "description": "水秀天桥、荷花池、喷泉、国旗"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "4464092d-012f-44bf-a98f-357fcfaf6f4c",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.936859,
+          33.909687
+        ]
+      },
+      "properties": {
+        "id": "4464092d-012f-44bf-a98f-357fcfaf6f4c",
+        "name": "红叶小区",
+        "type": "residential",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T01:39:26.749641+00:00",
+        "updatedAt": "2026-09-18T01:39:26.748847+00:00",
+        "description": "陈少爷HOME",
+        "longitude": 117.936859,
+        "latitude": 33.909687
       }
     },
     {
@@ -612,6 +612,74 @@
         "longitude": 117.941502034664,
         "updatedAt": "2026-09-18T03:21:15.276473+00:00",
         "description": "七年回忆&音乐启蒙"
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "0e36196d-21cc-432c-b2bd-6d66a30cd350",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          117.93741703033449,
+          33.911364024297534
+        ]
+      },
+      "properties": {
+        "id": "0e36196d-21cc-432c-b2bd-6d66a30cd350",
+        "name": "红叶小区北边小门外公厕",
+        "type": "public-toilet",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "createdAt": "2026-09-18T08:04:14.397079+00:00",
+        "updatedAt": "2026-09-18T08:04:14.397079+00:00",
+        "description": "睢宁第一传奇公厕",
+        "longitude": 117.937417030334,
+        "latitude": 33.9113640242975
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "5fefa8a0-61d5-44c6-84e9-216076f939e9",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [
+              117.95441150665285,
+              33.90821060167082
+            ],
+            [
+              117.95387506484987,
+              33.91120236309649
+            ],
+            [
+              117.95529127120973,
+              33.911309209776626
+            ],
+            [
+              117.95546293258668,
+              33.90819279325271
+            ],
+            [
+              117.95441150665285,
+              33.90821060167082
+            ]
+          ]
+        ]
+      },
+      "properties": {
+        "id": "5fefa8a0-61d5-44c6-84e9-216076f939e9",
+        "name": "实验小学",
+        "type": "school",
+        "phone": "",
+        "source": "user",
+        "address": "",
+        "latitude": 33.9098067775197,
+        "createdAt": "2026-09-18T08:06:20.601369+00:00",
+        "longitude": 117.954754900876,
+        "updatedAt": "2026-09-18T08:06:20.601369+00:00",
+        "description": "2015睢宁县小升初状元张航母校"
       }
     }
   ]

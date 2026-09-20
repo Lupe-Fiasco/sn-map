@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
     fetchOwnerSnapshot,
+    publicationLevel,
     publishSnapshot,
+    SNAPSHOT_LEVEL_LABELS,
     SNAPSHOT_PRESETS,
     shareTokenForOwner,
     snapshotDisclosure,
     snapshotForOwner,
+    snapshotNeedsRepublish,
     unpublishSnapshot,
 } from "../services/mapSnapshots.js";
 import {
@@ -19,16 +22,10 @@ import { supabase } from "../services/supabaseClient.js";
 
 const DEFAULT_TITLE = "睢宁地点地图";
 const PRESET_OPTIONS = [
-    ["map", "仅地图", "名称 + 地图位置或区域形状"],
-    ["basic", "基础信息", "仅地图 + 地点类型 + 经纬度"],
-    ["detailed", "详细信息", "基础信息 + 备注"],
+    ["basic", SNAPSHOT_LEVEL_LABELS.basic, "地图位置或区域形状、名称、类型和代表经纬度"],
+    ["details", SNAPSHOT_LEVEL_LABELS.details, "基础级别 + 备注、地址、电话等安全业务信息"],
+    ["images", SNAPSHOT_LEVEL_LABELS.images, "详细级别 + 已发布的实景图片"],
 ];
-
-function matchingPreset(fields) {
-    return Object.entries(SNAPSHOT_PRESETS).find(([, candidate]) =>
-        Object.keys(candidate).every((field) => candidate[field] === fields[field]),
-    )?.[0] ?? "custom";
-}
 
 function shareUrl(token) {
     const url = new URL(window.location.href);
@@ -37,14 +34,17 @@ function shareUrl(token) {
     return url.toString();
 }
 
-export default function SnapshotCard({ ownerId, places, cloud }) {
+export default function SnapshotCard({ ownerId, imagesEnabled, places, cloud }) {
     const [snapshot, setSnapshot] = useState(null);
     const [title, setTitle] = useState(DEFAULT_TITLE);
     const [status, setStatus] = useState("");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
-    const [preset, setPreset] = useState("map");
-    const [fields, setFields] = useState(SNAPSHOT_PRESETS.map);
+    const [preset, setPreset] = useState("basic");
+    const [imageCount, setImageCount] = useState(null);
+    const [imageCountError, setImageCountError] = useState("");
+    const [imageCountReload, setImageCountReload] = useState(0);
+    const [loadedOwnerId, setLoadedOwnerId] = useState(null);
     const ownerGenerationRef = useRef(createOwnerGeneration(ownerId ?? null));
     // ai coding：render 时立即使前一账号及更早快照请求失效，所有完成回调均须通过同一 guard。
     updateOwnerGeneration(ownerGenerationRef.current, ownerId ?? null);
@@ -63,9 +63,12 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
         setStatus("");
         setError("");
         setBusy(false);
-        setPreset("map");
-        setFields(SNAPSHOT_PRESETS.map);
-        if (!ownerId || !supabase) return undefined;
+        setPreset("basic");
+        setLoadedOwnerId(null);
+        if (!ownerId || !supabase) {
+            setLoadedOwnerId(ownerId ?? null);
+            return undefined;
+        }
         fetchOwnerSnapshot(supabase, ownerId)
             .then((row) => {
                 const ownerSnapshot = snapshotForOwner(row, operation.ownerId);
@@ -80,11 +83,8 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
                     return;
                 setSnapshot(ownerSnapshot);
                 setTitle(ownerSnapshot.title);
-                const publishedFields = snapshotDisclosure(ownerSnapshot.snapshot);
-                if (publishedFields) {
-                    setFields(publishedFields);
-                    setPreset(matchingPreset(publishedFields));
-                }
+                const publishedFields = snapshotDisclosure(ownerSnapshot.snapshot, ownerSnapshot);
+                setPreset(publicationLevel(publishedFields) ?? "basic");
             })
             .catch((reason) => {
                 if (
@@ -95,11 +95,33 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
                     )
                 )
                     setError(reason.message);
+            })
+            .finally(() => {
+                if (active && isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) {
+                    setLoadedOwnerId(operation.ownerId);
+                }
             });
         return () => {
             active = false;
         };
-    }, [ownerId]);
+    }, [ownerId, imagesEnabled]);
+
+    useEffect(() => {
+        let active = true;
+        const ids = places.features.map((feature) => String(feature.id));
+        setImageCountError("");
+        if (!ownerId || !imagesEnabled || !supabase || !ids.length) { setImageCount(0); return undefined; }
+        setImageCount(null);
+        const refreshImageCount = () => supabase.from("place_images").select("id", { count: "exact", head: true }).eq("owner_id", ownerId).in("place_id", ids)
+            .then(({ count, error: countError }) => {
+                if (!active) return;
+                if (countError) setImageCountError("实景图片数量读取失败，请确认已执行 migration 006。");
+                else setImageCount(count ?? 0);
+            }).catch(() => { if (active) setImageCountError("实景图片数量读取失败，请检查网络后重试。"); });
+        refreshImageCount();
+        window.addEventListener("place-images-changed", refreshImageCount);
+        return () => { active = false; window.removeEventListener("place-images-changed", refreshImageCount); };
+    }, [ownerId, imagesEnabled, places, imageCountReload]);
 
     const publish = async () => {
         invalidateOwnerGeneration(ownerGenerationRef.current);
@@ -108,7 +130,7 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
         setError("");
         setStatus("正在生成并发布脱敏快照…");
         try {
-            const row = await publishSnapshot(supabase, ownerId, title, places, fields);
+            const row = await publishSnapshot(supabase, ownerId, title, places, preset, { images: imagesEnabled });
             if (
                 !isOwnerGenerationCurrent(ownerGenerationRef.current, operation)
             )
@@ -117,7 +139,9 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
             if (!ownerSnapshot) return;
             setSnapshot(ownerSnapshot);
             setTitle(ownerSnapshot.title);
-            setStatus(`发布成功，共 ${places.features.length} 个地点；未选择的属性未写入公开快照。`);
+            setStatus(row.cleanupWarning
+                ? `快照已更新，但公开图片清理未完成：${row.cleanupWarning}${row.pendingCleanupPaths?.length ? ` 待清理路径：${row.pendingCleanupPaths.join("、")}` : ""}`
+                : `发布成功，共 ${places.features.length} 个地点；已应用“${SNAPSHOT_LEVEL_LABELS[preset]}”。`);
         } catch (reason) {
             if (
                 isOwnerGenerationCurrent(ownerGenerationRef.current, operation)
@@ -164,7 +188,9 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
             const ownerSnapshot = snapshotForOwner(row, operation.ownerId);
             if (!ownerSnapshot) return;
             setSnapshot(ownerSnapshot);
-            setStatus("公开访问已取消，原链接现在不可访问。");
+            setStatus(row.cleanupWarning
+                ? `公开访问已取消，但图片清理未完成：${row.cleanupWarning}${row.pendingCleanupPaths?.length ? ` 待清理路径：${row.pendingCleanupPaths.join("、")}` : ""}`
+                : "公开访问已取消；原链接现在不可访问，但已缓存或已复制内容无法绝对收回。");
         } catch (reason) {
             if (isOwnerGenerationCurrent(ownerGenerationRef.current, operation))
                 setError(reason.message);
@@ -179,14 +205,14 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
         cloud.state !== "connected" ||
         cloud.ownerId !== ownerId ||
         cloud.saving;
-    const choosePreset = (value) => {
-        setPreset(value);
-        setFields(SNAPSHOT_PRESETS[value]);
-    };
-    const toggleField = (field) => {
-        setPreset("custom");
-        setFields((current) => ({ ...current, [field]: !current[field] }));
-    };
+    // ai coding：账号切换时旧快照立即隐藏；空状态始终以 basic 驱动表单，渲染逻辑不接收 null disclosure。
+    const snapshotLoading = Boolean(ownerId && supabase && loadedOwnerId !== ownerId);
+    const publishedDisclosure = currentSnapshot
+        ? (snapshotDisclosure(currentSnapshot.snapshot, currentSnapshot) ?? SNAPSHOT_PRESETS.basic)
+        : SNAPSHOT_PRESETS.basic;
+    const publishedLevel = publicationLevel(publishedDisclosure) ?? "basic";
+    const needsRepublish = snapshotNeedsRepublish(currentSnapshot?.snapshot);
+    const imagesUnavailable = preset === "images" && (!imagesEnabled || imageCount === null || imageCount === 0);
     return (
         <section className="snapshot-card" aria-labelledby="snapshot-title">
             <p className="section-label">公开只读快照</p>
@@ -200,6 +226,12 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
                     {currentSnapshot?.is_public ? "PUBLIC" : "PRIVATE"}
                 </span>
             </div>
+            {currentSnapshot?.is_public && <p className="snapshot-current-level">当前公开级别：<b>{SNAPSHOT_LEVEL_LABELS[publishedLevel]}</b></p>}
+            {snapshotLoading ? (
+                <p className="file-status" role="status">正在读取当前账号的公开快照…</p>
+            ) : !currentSnapshot ? (
+                <p className="file-status">当前账号尚无公开快照；首次发布默认使用基础级别。</p>
+            ) : null}
             <label className="snapshot-label">
                 地图标题
                 <input
@@ -213,18 +245,14 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
                 <legend>公开展示级别</legend>
                 <div className="snapshot-presets">
                     {PRESET_OPTIONS.map(([value, label, help]) => (
-                        <label key={value}>
-                            <input type="radio" name="snapshot-preset" checked={preset === value} onChange={() => choosePreset(value)} />
+                        <label key={value} className={value === "images" && (!imagesEnabled || !(imageCount > 0)) ? "disabled" : ""}>
+                            <input type="radio" name="snapshot-preset" checked={preset === value} disabled={value === "images" && (!imagesEnabled || !(imageCount > 0))} onChange={() => setPreset(value)} />
                             <span><b>{label}</b><small>{help}</small></span>
                         </label>
                     ))}
                 </div>
-                <div className="snapshot-fields" aria-label="可调整的公开字段">
-                    {[["type", "类型"], ["coordinates", "经纬度"], ["description", "备注"]].map(([field, label]) => (
-                        <label key={field}><input type="checkbox" checked={fields[field]} onChange={() => toggleField(field)} />{label}</label>
-                    ))}
-                </div>
-                <p className="form-help">名称和 Point 位置或 Polygon 完整形状始终公开；仅勾选字段会写入公开快照。</p>
+                <p className="form-help">三个级别均固定公开名称、类型、代表经纬度和 Point 位置或 Polygon 完整形状。{imagesEnabled ? (imageCountError ? "图片数量暂不可用。" : imageCount === null ? "正在读取实景图片数量…" : imageCount ? `当前正式地点共 ${imageCount} 张图片；级别 3 会重新编码并移除元数据。` : "当前没有可公开的实景图片，级别 3 暂不可选。") : "实景图片仅限已批准正式账号或管理员公开。"}</p>
+                {imageCountError && <div className="image-count-error" role="alert"><span>{imageCountError}</span><button className="button" type="button" onClick={() => setImageCountReload((value) => value + 1)}>重试</button></div>}
             </fieldset>
             <p className="file-status">
                 发布会复制此刻的正式地点集合；待定点、编辑草稿及 localStorage
@@ -232,7 +260,9 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
             </p>
             {currentSnapshot && (
                 <p className="snapshot-warning">
-                    {snapshotDisclosure(currentSnapshot.snapshot)
+                    {needsRepublish
+                        ? "这是旧版快照，当前范围已按原记录兼容显示。请重新发布以应用新版固定展示级别；如不再公开，可先取消公开。"
+                        : snapshotDisclosure(currentSnapshot.snapshot, currentSnapshot)
                         ? "当前公开内容以最后一次发布时选择的展示范围为准；修改选项后需更新公开快照。"
                         : "这是历史快照，无法确认其脱敏范围。请重新发布以应用展示范围；如不再公开，可先取消公开。"}
                 </p>
@@ -251,7 +281,7 @@ export default function SnapshotCard({ ownerId, places, cloud }) {
                 <button
                     className="button primary"
                     type="button"
-                    disabled={busy || unavailable}
+                    disabled={busy || unavailable || imagesUnavailable}
                     onClick={publish}
                 >
                     {busy

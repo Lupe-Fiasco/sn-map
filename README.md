@@ -15,7 +15,7 @@ npm run build
 
 1. 复制 `.env.example` 为 `.env.local` 并填写项目 URL 与 publishable key。
 2. 在 Supabase 控制台启用 Authentication 的邮箱密码登录；如需保留兼容模式，同时启用 Anonymous Sign-Ins。按部署域名配置邮箱确认跳转 URL。
-3. 按文件名顺序执行 `supabase/migrations/` 中尚未应用的 migration。已执行 004 的环境必须继续执行 `202609170005_create_profiles_approval.sql`；本仓库不会自动执行或修改远程数据库。
+3. 按文件名顺序执行 `supabase/migrations/` 的 **001–008**。006 只提供图片基础对象，007 加固图片 RPC/RLS，008 强制公开级别；三者缺一不可。已执行 007 的环境必须继续执行 `202609200008_enforce_snapshot_levels.sql`，本仓库不会自动修改远程数据库。008 会把无法精确对应 `basic` / `details` / `images` 的旧快照保留为字段不可变、不可伪造的 legacy 状态；未升级时 RPC 只返回名称与 geometry 安全基线。legacy 公开快照必须在管理端一次性选择合法级别重新发布，或取消公开，不能直接替换快照后沿用旧字段组合。
 4. 先注册并完成管理员账号的邮箱确认，再由项目所有者在 **Supabase SQL Editor** 手动执行以下 bootstrap。把占位文本替换为自己的管理员邮箱；不要把真实邮箱或任何凭据写入仓库。该 SQL 只绑定已经存在的 `auth.users.id`，可安全重复执行：
 
 ```sql
@@ -33,9 +33,11 @@ on conflict (user_id) do nothing;
 
 ## 公开只读快照
 
-管理端可把当前已保存的地点集合按“仅地图 / 基础信息 / 详细信息”预设发布，并单独调整类型、经纬度、备注是否公开。名称与 geometry 是公开地图必需内容；快照只写入明确选择的属性，不包含 owner、source、会话或其他私有字段。快照是发布时独立保存的 JSON，之后编辑私有地点不会改变它；再次发布才更新，取消公开后原链接无法读取。分享页只通过数据库安全 RPC 获取服务端白名单重建的数据，不直接读取快照表。
+管理端使用三个固定公开级别：`basic`（名称、类型、代表经纬度与完整 geometry）、`details`（basic + notes/description/address/phone/website/opening_hours 安全白名单字段）、`images`（details + 图片）。类型和经纬度不能单独取消，也不会输出 owner、source、会话、内部路径或 token。服务层只接受这三个 level，数据库也拒绝任意字段组合。快照是发布时独立保存的 JSON；legacy 公开快照在重新发布前仅返回名称与 geometry，必须选择合法级别重新发布或取消公开，不能继续更新旧 snapshot 后重新开启公开。取消公开后原链接无法读取。分享页只通过数据库安全 RPC 获取服务端白名单重建的数据，不直接读取快照表。
 
-**只有执行 004 migration 后才允许启用公开分享。** 004 会把旧行按“仅地图（名称 + geometry）”处理并撤销访客对表的直接读取；005 只收紧 owner 管理策略，不改变公开 RPC。旧公开快照仍需在管理端重新发布或取消公开，才能明确应用新的公开字段设置。分享页在 Auth/profile/admin 初始化之前独立分流，无需登录、不创建匿名会话，也不受账号审核状态影响；页面隐藏全部维护、文件同步和发布功能。客户端只使用 publishable key，禁止配置或暴露 `service_role`。
+已保存地点可上传 JPG/PNG/WebP 实景图片（单张不超过 5MB）。原图保存在私有 `place-images` bucket，只有已审核正式账号或管理员本人可管理，图片不会写入 places/GeoJSON；匿名兼容账号不能读取、上传或选择含图片的第三级。第三级仅在当前正式地点有图片时可选，发布时会用 Canvas/ImageBitmap 将原图重新编码为 WebP（失败不会回退上传原图），再复制到 `published-place-images`；快照只保存图片 id、替代文本和可由服务端校验的公开对象路径，RPC 会对照 owner/place/image 元数据与 bucket 对象重建白名单响应。重新发布会按当前级别替换图片范围，改为较低级别或取消公开会尽力删除旧公开副本；已被浏览器/CDN 缓存或第三方复制的 URL 无法保证绝对收回。浏览器重编码不是可验证的绝对安全边界；如需服务端验证像素转码，应后续增加受信任 Edge Function，且不得在浏览器使用 `service_role`。
+
+**只有依次执行 004–008 migration 后才允许启用带图片的公开分享。** 004 会把旧行按“仅地图（名称 + geometry）”处理并撤销访客对表的直接读取；005 收紧 owner 管理策略；006 创建图片表/bucket；007 保持图片 RPC/RLS 安全；008 阻止直接 REST/API 写入非法 level、字段组合或伪造 legacy。历史快照需在管理端明确选择级别并重新发布。分享页在 Auth/profile/admin 初始化之前独立分流，无需登录、不创建匿名会话，也不受账号审核状态影响；页面隐藏全部维护、文件同步和发布功能。客户端只使用 publishable key，禁止配置或暴露 `service_role`。
 
 ### 旧版 places 手动升级
 
