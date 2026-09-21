@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { deleteCloudPlace, featureToPlaceRow, fetchCloudPlaces, placeRowToFeature, rowsToCollection, saveCloudPlaceToCollection, seedCloudPlaces } from "../src/services/supabasePlaces.js";
 
-const placeTypes = [{ id: "other" }];
+const placeTypes = [{ id: "other" }, { id: "road" }];
 
 const point = {
   type: "Feature",
@@ -34,6 +34,16 @@ test("round-trips Polygon geometry and required properties", () => {
   assert.equal(restored.properties.custom, "保留");
   assert.ok(Number.isFinite(restored.properties.longitude));
   assert.equal(rowsToCollection([row], placeTypes).features.length, 1);
+});
+
+test("round-trips LineString geometry, center and contained ids in one map scope", () => {
+  const line = { ...point, id: "line-1", geometry: { type: "LineString", coordinates: [[118, 34], [118.4, 34.2]] }, properties: { ...point.properties, id: "line-1", name: "测试线", type: "road", contained_place_ids: [point.id] } };
+  const row = featureToPlaceRow(line, "owner-1", "xuhui");
+  assert.equal(row.map_id, "xuhui");
+  assert.deepEqual([row.longitude, row.latitude], [118.2, 34.1]);
+  assert.deepEqual(placeRowToFeature(row).geometry, line.geometry);
+  assert.deepEqual(placeRowToFeature(row).properties.contained_place_ids, [point.id]);
+  assert.equal(rowsToCollection([featureToPlaceRow(point, "owner-1", "xuhui"), row], placeTypes).features.length, 2);
 });
 
 test("uses the owner-scoped conflict target when two owners seed the same ids", async () => {

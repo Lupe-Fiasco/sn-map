@@ -1,4 +1,4 @@
-import { emptyCollection, getPolygonRepresentativeCoordinate, validatePlaces } from "./geojson.js";
+import { emptyCollection, getGeometryRepresentativeCoordinate, validatePlaces } from "./geojson.js";
 import { cleanupPlaceImagesBeforeDelete } from "./placeImages.js";
 
 export function featureToPlaceRow(feature, ownerId, mapId = "suining") {
@@ -7,7 +7,7 @@ export function featureToPlaceRow(feature, ownerId, mapId = "suining") {
     ? feature.geometry.coordinates
     : (Number.isFinite(properties.longitude) && Number.isFinite(properties.latitude)
       ? [properties.longitude, properties.latitude]
-      : getPolygonRepresentativeCoordinate(feature.geometry));
+      : getGeometryRepresentativeCoordinate(feature.geometry));
 
   return {
     id: String(feature.id),
@@ -64,7 +64,7 @@ function validatePlaceRow(row, placeTypes) {
       geometry: structuredClone(row.geometry),
       properties: structuredClone(row.properties),
     }],
-  }, placeTypes);
+  }, placeTypes, { validateContainedReferences: false });
 }
 
 export function rowsToCollection(rows, placeTypes, onInvalidRow = () => {}) {
@@ -83,7 +83,15 @@ export function rowsToCollection(rows, placeTypes, onInvalidRow = () => {}) {
       onInvalidRow({ index, id: typeof row?.id === "string" ? row.id : null, reason: normalizedError.message, error: normalizedError });
     }
   });
-  return { ...emptyCollection(), features };
+  const points = new Set(features.filter((feature) => feature.geometry.type === "Point").map((feature) => feature.id));
+  const scopedFeatures = features.filter((feature, index) => {
+    const contained = feature.properties.contained_place_ids;
+    if (feature.geometry.type !== "LineString" || !contained?.some((id) => !points.has(id))) return true;
+    const error = new Error(`云端地点 ${feature.id} 只能包含当前地图中已存在的 Point 地点`);
+    onInvalidRow({ index, id: feature.id, reason: error.message, error });
+    return false;
+  });
+  return { ...emptyCollection(), features: scopedFeatures };
 }
 
 export async function ensureAnonymousSession(client) {

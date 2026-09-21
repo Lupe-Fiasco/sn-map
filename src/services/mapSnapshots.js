@@ -1,4 +1,4 @@
-import { emptyCollection, getPolygonRepresentativeCoordinate } from "./geojson.js";
+import { emptyCollection, getGeometryRepresentativeCoordinate } from "./geojson.js";
 import { cleanupPublishedImages, copyPublishedImages, fetchImagesForPlaces } from "./placeImages.js";
 
 export const SNAPSHOT_PRESETS = {
@@ -78,7 +78,7 @@ export function createPublicSnapshot(collection, fields = SNAPSHOT_PRESETS.basic
           ? feature.geometry.coordinates
           : (Number.isFinite(feature.properties.longitude) && Number.isFinite(feature.properties.latitude)
             ? [feature.properties.longitude, feature.properties.latitude]
-            : getPolygonRepresentativeCoordinate(feature.geometry));
+            : getGeometryRepresentativeCoordinate(feature.geometry));
         if (Number.isFinite(coordinates?.[0]) && Number.isFinite(coordinates?.[1])) {
           properties.longitude = coordinates[0];
           properties.latitude = coordinates[1];

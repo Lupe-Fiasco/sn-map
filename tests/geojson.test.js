@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createPlace, createPolygonDraftGeometry, getPolygonRepresentativeCoordinate, getSaveSummary, getUnsyncedChanges, insertPolygonVertex, normalizeCollection, validatePlaces, validatePolygonGeometry } from "../src/services/geojson.js";
+import { createPlace, createPolygonDraftGeometry, getLineStringRepresentativeCoordinate, getPolygonRepresentativeCoordinate, getSaveSummary, getUnsyncedChanges, insertPolygonVertex, normalizeCollection, validatePlaces, validatePolygonGeometry } from "../src/services/geojson.js";
 
-const types = [{ id: "other", name: "其他", color: "#65736f" }];
+const types = [{ id: "other", name: "其他", color: "#65736f" }, { id: "road", name: "道路", color: "#315f8c" }];
 const feature = (id, name = id, coordinates = [118, 34]) => ({ type: "Feature", id, geometry: { type: "Point", coordinates }, properties: { id, source: "user", name, type: "other" } });
 const collection = (...features) => ({ type: "FeatureCollection", features });
 const polygon = (id, ring = [[118, 34], [118.1, 34], [118.1, 34.1], [118, 34]]) => ({ ...feature(id), geometry: { type: "Polygon", coordinates: [ring] } });
+const line = (id, coordinates = [[118, 34], [118.2, 34.1]]) => ({ ...feature(id), geometry: { type: "LineString", coordinates }, properties: { ...feature(id).properties, type: "road" } });
 
 test("validates and normalizes compatible user Point GeoJSON", () => {
   const data = collection(feature("a"));
@@ -14,6 +15,41 @@ test("validates and normalizes compatible user Point GeoJSON", () => {
   assert.throws(() => validatePlaces(collection({ ...feature("b"), geometry: { type: "Point", coordinates: [200, 34] } }), types), /WGS84/);
   const edited = createPlace({ name: "已编辑", type: "other", address: "", phone: "", description: "", longitude: 119, latitude: 35 }, feature("point"));
   assert.deepEqual(edited.geometry.coordinates, [119, 35]);
+});
+
+test("creates and edits Point, LineString and Polygon without reading a missing feature", () => {
+  const values = { name: "新地点", type: "other", address: "", phone: "", description: "", longitude: 117.95, latitude: 33.91 };
+  // ai coding：覆盖真实新增点回归路径：existing 为 null 且 values 不含 geometry。
+  let point;
+  assert.doesNotThrow(() => { point = createPlace(values, null); });
+  assert.deepEqual(point.geometry, { type: "Point", coordinates: [117.95, 33.91] });
+  assert.deepEqual(createPlace({ ...values, longitude: 118, latitude: 34 }, point).geometry.coordinates, [118, 34]);
+
+  for (const existing of [line("line-edit"), polygon("area-edit")]) {
+    const created = createPlace({ ...values, type: existing.properties.type, geometry: existing.geometry }, null);
+    assert.deepEqual(created.geometry, existing.geometry);
+    const edited = createPlace({ ...values, type: existing.properties.type }, existing);
+    assert.deepEqual(edited.geometry, existing.geometry);
+    assert.equal(edited.id, existing.id);
+  }
+});
+
+test("validates open LineString places, representative coordinates and contained Points", () => {
+  const point = feature("point-a", "已有点");
+  const linked = { ...line("line-a"), properties: { ...line("line-a").properties, contained_place_ids: [point.id] } };
+  assert.doesNotThrow(() => validatePlaces(collection(point, linked), types));
+  assert.deepEqual(getLineStringRepresentativeCoordinate(linked.geometry), [118.1, 34.05]);
+  const created = createPlace({ name: "线", type: "road", address: "", phone: "", description: "", geometry: linked.geometry, contained_place_ids: [point.id] });
+  assert.equal(created.geometry.type, "LineString");
+  assert.deepEqual(created.properties.contained_place_ids, [point.id]);
+  assert.deepEqual([created.properties.longitude, created.properties.latitude], [118.1, 34.05]);
+  assert.throws(() => validatePlaces(collection(line("few", [[118, 34]])), types), /2 个顶点/);
+  assert.throws(() => validatePlaces(collection(line("same", [[118, 34], [118, 34]])), types), /2 个不同顶点/);
+  assert.throws(() => validatePlaces(collection(line("closed", [[118, 34], [118.1, 34.1], [118, 34]])), types), /线不能闭合/);
+  assert.throws(() => validatePlaces(collection(line("range", [[118, 34], [181, 34]])), types), /WGS84/);
+  assert.throws(() => validatePlaces(collection(linked), types), /当前地图.*Point/);
+  assert.throws(() => validatePlaces(collection(point, { ...linked, properties: { ...linked.properties, contained_place_ids: [point.id, point.id] } }), types), /无重复/);
+  assert.throws(() => validatePlaces(collection(point, { ...polygon("area"), properties: { ...polygon("area").properties, contained_place_ids: [point.id] } }), types), /仅允许用于 LineString/);
 });
 
 test("validates Polygon outer rings and preserves them through place creation", () => {
@@ -67,7 +103,7 @@ test("recomputes Polygon representative metadata after geometry editing", () => 
   assert.deepEqual([edited.properties.longitude, edited.properties.latitude], getPolygonRepresentativeCoordinate(geometry));
 });
 
-for (const [label, makeFeature] of [["Point", feature], ["Polygon", polygon]]) {
+for (const [label, makeFeature] of [["Point", feature], ["LineString", line], ["Polygon", polygon]]) {
   test(`rejects invalid ${label} id and source metadata`, () => {
     const valid = makeFeature(`${label.toLowerCase()}-valid`);
     const withoutTopId = { ...valid }; delete withoutTopId.id;

@@ -47,7 +47,7 @@ export default function PlaceList({
                 <TypeSelect
                     id="type-filter"
                     value={typeFilter}
-                    options={types}
+                    options={types.filter((type) => !type.hidden)}
                     placeholder="全部类型"
                     onChange={onTypeFilter}
                 />
@@ -81,6 +81,8 @@ export default function PlaceList({
                                     {type.name} ·{" "}
                                     {feature.geometry.type === "Polygon"
                                         ? "区域"
+                                        : feature.geometry.type === "LineString"
+                                          ? "线"
                                         : "点"}
                                 </span>
                             </button>
@@ -96,7 +98,7 @@ export default function PlaceList({
                 <p className="empty-state">
                     {places.features.length
                         ? "没有符合筛选条件的地点。"
-                        : "暂无用户地点。可新增地点或区域开始维护。"}
+                        : "暂无用户地点。可新增点、线或区域开始维护。"}
                 </p>
             )}
         </>

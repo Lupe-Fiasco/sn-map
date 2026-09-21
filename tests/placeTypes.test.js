@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { TYPE_ICON_PATHS } from "../src/components/typeIconRegistry.js";
 import { validatePlaces } from "../src/services/geojson.js";
+import { getTypeOptionsForGeometry, isTypeAllowedForGeometry, LINE_PLACE_TYPE_IDS } from "../src/services/placeTypes.js";
 
 const readJson = async (relativePath) => JSON.parse(await readFile(new URL(relativePath, import.meta.url), "utf8"));
 const placeTypes = await readJson("../public/data/place-types.json");
@@ -23,16 +24,24 @@ test("place type ids, icons and colors are unique, valid and registered", () => 
   }
 });
 
-test("every configured type passes the existing Point and Polygon validation chain", () => {
+test("configured types are restricted to compatible geometry", () => {
   for (const type of placeTypes) {
-    const pointId = `${type.id}-point`; const polygonId = `${type.id}-polygon`;
-    const properties = (id) => ({ id, source: "user", name: type.name, type: type.id });
-    const features = [
-      { type: "Feature", id: pointId, geometry: { type: "Point", coordinates: [118, 34] }, properties: properties(pointId) },
-      { type: "Feature", id: polygonId, geometry: { type: "Polygon", coordinates: [[[118, 34], [118.1, 34], [118.1, 34.1], [118, 34]]] }, properties: properties(polygonId) },
-    ];
-    assert.doesNotThrow(() => validatePlaces({ type: "FeatureCollection", features }, placeTypes), type.id);
+    for (const [geometryType, coordinates] of [["Point", [118, 34]], ["LineString", [[118, 34], [118.1, 34.1]]], ["Polygon", [[[118, 34], [118.1, 34], [118.1, 34.1], [118, 34]]]]]) {
+      const id = `${type.id}-${geometryType}`;
+      const collection = { type: "FeatureCollection", features: [{ type: "Feature", id, geometry: { type: geometryType, coordinates }, properties: { id, source: "user", name: type.name, type: type.id } }] };
+      const assertion = isTypeAllowedForGeometry(type.id, geometryType) ? assert.doesNotThrow : assert.throws;
+      assertion(() => validatePlaces(collection, placeTypes), `${type.id}/${geometryType}`);
+    }
   }
+});
+
+test("line forms expose four semantic types and hide the legacy generic type", () => {
+  const options = getTypeOptionsForGeometry(placeTypes, "LineString");
+  assert.deepEqual(options.map((type) => type.id), LINE_PLACE_TYPE_IDS);
+  assert.deepEqual(options.map((type) => type.name), ["道路", "小巷", "河流", "桥梁"]);
+  assert.equal(placeTypes.find((type) => type.id === "linear-feature")?.hidden, true);
+  assert.equal(getTypeOptionsForGeometry(placeTypes, "Point").some((type) => LINE_PLACE_TYPE_IDS.includes(type.id)), false);
+  assert.equal(getTypeOptionsForGeometry(placeTypes, "Polygon").some((type) => LINE_PLACE_TYPE_IDS.includes(type.id)), false);
 });
 
 test("seed places use the reviewed types for exact ids and names", async () => {

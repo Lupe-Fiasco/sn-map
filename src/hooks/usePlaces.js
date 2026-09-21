@@ -152,6 +152,9 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
     if (operationRef.current && isOwnerGenerationCurrent(ownerGenerationRef.current, operationRef.current)) throw new Error("云端操作正在进行，请稍候");
     if (!isOwnerGenerationCurrent(ownerGenerationRef.current, loadedGenerationRef.current)) throw new Error("当前账号数据正在加载，请稍候");
     const feature = createPlace(values, existing);
+    // ai coding：正式保存前以当前 owner + map 集合解析线关联，拒绝跨范围、非 Point 或已删除地点 id。
+    const candidate = { ...places, features: existing ? places.features.map((item) => item.id === existing.id ? feature : item) : [...places.features, feature] };
+    validatePlaces(candidate, types);
     const session = cloudSessionRef.current;
     const operation = captureOwnerGeneration(ownerGenerationRef.current);
 
@@ -163,7 +166,7 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
         const { feature: savedFeature, collection: next } = await saveCloudPlaceToCollection(supabase, places, feature, session.userId, existing?.id, session.mapId);
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
-        validatePlaces({ ...emptyCollection(), features: [savedFeature] }, types);
+        validatePlaces({ ...candidate, features: candidate.features.map((item) => item.id === savedFeature.id ? savedFeature : item) }, types);
         const draftResult = storeDraft(next, session.userId);
         setPlaces(next);
         setCloud({ ...cloudStatus("connected", "云端已连接，地点已保存", false, session.userId), mapId: session.mapId });
@@ -177,7 +180,7 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
     }
 
     if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
-    const next = { ...places, features: existing ? places.features.map((item) => item.id === existing.id ? feature : item) : [...places.features, feature] };
+    const next = candidate;
     const draftResult = storeDraft(next, ownerIdForScope(operation.ownerId));
     setPlaces(next);
     return { feature, ...draftResult, cloudSaved: false };
@@ -195,7 +198,7 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
         await deleteCloudPlace(supabase, id, session.userId, session.mapId);
         if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
-        const next = { ...places, features: places.features.filter((item) => item.id !== id) };
+        const next = removePlaceFromCollection(places, id);
         const draftResult = storeDraft(next, session.userId);
         setPlaces(next);
         setCloud({ ...cloudStatus("connected", "云端已连接，地点已删除", false, session.userId), mapId: session.mapId });
@@ -209,7 +212,7 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
     }
 
     if (!isOwnerGenerationCurrent(ownerGenerationRef.current, operation)) throw staleOwnerOperationError();
-    const next = { ...places, features: places.features.filter((item) => item.id !== id) };
+    const next = removePlaceFromCollection(places, id);
     const draftResult = storeDraft(next, ownerIdForScope(operation.ownerId));
     setPlaces(next);
     return { ...draftResult, cloudSaved: false };
@@ -230,4 +233,13 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
   const unsynced = useMemo(() => getUnsyncedChanges(places, baseline), [places, baseline]);
 
   return { places, types, status, cloud, unsynced, save, remove, getOwnerOperation, isOwnerOperationCurrent, markSynced };
+}
+
+function removePlaceFromCollection(collection, id) {
+  return {
+    ...collection,
+    features: collection.features.filter((item) => item.id !== id).map((item) => item.geometry.type === "LineString" && item.properties.contained_place_ids?.includes(id)
+      ? { ...item, properties: { ...item.properties, contained_place_ids: item.properties.contained_place_ids.filter((placeId) => placeId !== id) } }
+      : item),
+  };
 }

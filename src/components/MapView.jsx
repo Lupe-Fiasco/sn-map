@@ -135,7 +135,7 @@ function roadStyle(feature, zoom) {
     };
 }
 
-function drawCursorPreview(layer, drawCoordinates, cursorLatLng) {
+function drawCursorPreview(layer, drawCoordinates, cursorLatLng, lineDrawing) {
     layer.clearLayers();
     if (!cursorLatLng) return;
 
@@ -149,7 +149,7 @@ function drawCursorPreview(layer, drawCoordinates, cursorLatLng) {
     ).size;
 
     // ai coding：光标坐标仅存在于 Leaflet 临时层；实时面填充由已点击点与光标点共同组成，不写入 React 顶点状态。
-    if (previewLatLngs.length >= 3 && distinctCount >= 3) {
+    if (!lineDrawing && previewLatLngs.length >= 3 && distinctCount >= 3) {
         L.polygon(previewLatLngs, {
             stroke: false,
             fillColor: "#2c9a78",
@@ -162,15 +162,17 @@ function drawCursorPreview(layer, drawCoordinates, cursorLatLng) {
             color: "#0e6f59",
             weight: 3,
             opacity: 0.9,
+            fill: false,
             interactive: false,
         }).addTo(layer);
     }
-    if (clickedLatLngs.length >= 2) {
+    if (!lineDrawing && clickedLatLngs.length >= 2) {
         L.polyline([cursor, clickedLatLngs[0]], {
             color: "#0e6f59",
             weight: 3,
             opacity: 0.9,
             dashArray: "7 6",
+            fill: false,
             interactive: false,
         }).addTo(layer);
     }
@@ -209,6 +211,7 @@ function createEditVertexIcon() {
 }
 
 export default function MapView({
+    mapId,
     bounds,
     mapName = "当前地区",
     baseRoadsPath,
@@ -218,10 +221,13 @@ export default function MapView({
     pendingCoordinates,
     adding,
     areaDrawing,
+    lineDrawing,
     areaPreview,
+    drawGeometryType,
     drawCoordinates,
     onMapClick,
     onCloseArea,
+    onFinishLine,
     onSelect,
     onRoadStatus,
     editingFeature,
@@ -233,9 +239,11 @@ export default function MapView({
     const mapRef = useRef(null);
     const layersRef = useRef(null);
     const drawCoordinatesRef = useRef(drawCoordinates);
-    const callbacksRef = useRef({ onMapClick, onSelect, onCloseArea, onEditGeometryChange });
+    const interactionRef = useRef({ areaDrawing, lineDrawing });
+    const callbacksRef = useRef({ onMapClick, onSelect, onCloseArea, onFinishLine, onEditGeometryChange, onRoadStatus });
     drawCoordinatesRef.current = drawCoordinates;
-    callbacksRef.current = { onMapClick, onSelect, onCloseArea, onEditGeometryChange };
+    interactionRef.current = { areaDrawing, lineDrawing };
+    callbacksRef.current = { onMapClick, onSelect, onCloseArea, onFinishLine, onEditGeometryChange, onRoadStatus };
 
     useEffect(() => {
         if (!bounds || !containerRef.current || mapRef.current)
@@ -277,13 +285,14 @@ export default function MapView({
             dashArray: "5 5",
             interactive: false,
         }).addTo(layers.rectangle);
-        L.control
+        const layerControl = L.control
             .layers(null, {
                 地图范围: layers.rectangle,
                 "OSM 基础道路（只读）": layers.roads,
                 [readOnly ? "快照地点（只读）" : "用户地点"]: layers.places,
             })
             .addTo(map);
+        layers.layerControl = layerControl;
         const updateLimits = () => {
             const followedMinimum =
                 Number.isFinite(map.getZoom()) &&
@@ -305,6 +314,14 @@ export default function MapView({
                 event.latlng.lat,
             ),
         );
+        const handleContextMenu = (event) => {
+            if (!interactionRef.current.areaDrawing && !interactionRef.current.lineDrawing) return;
+            // ai coding：仅绘制模式捕获地图右键；区域无论顶点是否足够都阻止菜单并交由同一闭合入口提示或完成。
+            event.preventDefault();
+            if (interactionRef.current.lineDrawing) callbacksRef.current.onFinishLine?.();
+            else callbacksRef.current.onCloseArea?.();
+        };
+        containerRef.current.addEventListener("contextmenu", handleContextMenu);
         const observer = new ResizeObserver(() => {
             map.invalidateSize({ pan: false });
             updateLimits();
@@ -346,25 +363,35 @@ export default function MapView({
                         roadStyle(feature, map.getZoom()),
                     ),
                 );
-                onRoadStatus?.(
+                callbacksRef.current.onRoadStatus?.(
                     "ready",
                     `已加载 ${data.features.length} 个只读要素`,
                 );
             })
             .catch((error) => {
                 console.error("加载基础道路失败：", error);
-                onRoadStatus?.("error", `加载失败（${error.message}）`);
+                callbacksRef.current.onRoadStatus?.("error", `加载失败（${error.message}）`);
             });
 
         return () => {
             cancelled = true;
             observer.disconnect();
+            containerRef.current?.removeEventListener("contextmenu", handleContextMenu);
             map.off("zoomend", handleMarkerZoomEnd);
             map.remove();
             mapRef.current = null;
             layersRef.current = null;
         };
-    }, [bounds, baseRoadsPath, onRoadStatus, readOnly]);
+        // ai coding：初始化仅由真实地图配置驱动；交互模式、绘制点和父级 callback 均经 ref 读取，不销毁 Leaflet 实例或再次 fitBounds。
+    }, [mapId, bounds?.south, bounds?.west, bounds?.north, bounds?.east, baseRoadsPath]);
+
+    useEffect(() => {
+        const { layerControl, places: placesLayer } = layersRef.current ?? {};
+        if (!layerControl || !placesLayer) return;
+        // ai coding：只读模式仅刷新图层控件文案；不得重建地图或触发 fitBounds，以保留用户当前视野。
+        layerControl.removeLayer(placesLayer);
+        layerControl.addOverlay(placesLayer, readOnly ? "快照地点（只读）" : "用户地点");
+    }, [readOnly]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -382,18 +409,18 @@ export default function MapView({
                 const color = /^#[0-9a-f]{6}$/i.test(type?.color) ? type.color : "#65736f";
                 const polygon = L.polygon(feature.geometry.coordinates[0].map(([longitude, latitude]) => [latitude, longitude]), {
                     color, fillColor: color, fillOpacity: selected ? 0.32 : 0.18,
-                    opacity: 0.9, weight: selected ? 4 : 2, interactive: !areaPreview,
+                    opacity: 0.9, weight: selected ? 4 : 2, interactive: !areaPreview || lineDrawing,
                     bubblingMouseEvents: false,
                 }).bindTooltip(tooltip).addTo(layer);
                 // ai coding：绘制及待保存预览期间既有区域退出交互，避免误选导致临时几何丢失。
                 const element = polygon.getElement();
-                if (!areaPreview && element) {
+                if ((!areaPreview || lineDrawing) && element) {
                     // ai coding：区域截获地图点击时显式按模式分流，新增点模式使用实际点击坐标，其余模式仍选中区域。
                     polygon.on("click", (event) => {
-                        if (adding) callbacksRef.current.onMapClick?.(event.latlng.lng, event.latlng.lat);
+                        if (adding || lineDrawing) callbacksRef.current.onMapClick?.(event.latlng.lng, event.latlng.lat);
                         else callbacksRef.current.onSelect?.(feature.id, true);
                     });
-                    if (!adding) {
+                    if (!adding && !lineDrawing) {
                         element.setAttribute("tabindex", "0"); element.setAttribute("role", "button");
                         element.setAttribute("aria-label", `${feature.properties.name}，区域`);
                         element.addEventListener("keydown", (event) => {
@@ -403,13 +430,31 @@ export default function MapView({
                 }
                 return;
             }
+            if (feature.geometry.type === "LineString") {
+                const color = /^#[0-9a-f]{6}$/i.test(type?.color) ? type.color : "#65736f";
+                const polyline = L.polyline(feature.geometry.coordinates.map(([longitude, latitude]) => [latitude, longitude]), {
+                    color, opacity: 0.95, weight: selected ? 7 : 4, fill: false, interactive: !areaPreview || lineDrawing,
+                    bubblingMouseEvents: false,
+                }).bindTooltip(tooltip).addTo(layer);
+                polyline.on("click", (event) => lineDrawing
+                    ? callbacksRef.current.onMapClick?.(event.latlng.lng, event.latlng.lat)
+                    : callbacksRef.current.onSelect?.(feature.id, true));
+                const element = polyline.getElement();
+                if (element && !lineDrawing) {
+                    element.setAttribute("tabindex", "0"); element.setAttribute("role", "button");
+                    element.setAttribute("aria-label", `${feature.properties.name}，线`);
+                    element.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); callbacksRef.current.onSelect?.(feature.id, true); } });
+                }
+                return;
+            }
             const metrics = markerMetrics(map.getZoom());
             const icon = createPlaceIcon(type, selected, map.getZoom());
             const [longitude, latitude] = feature.geometry.coordinates;
             const marker = L.marker([latitude, longitude], {
                 icon,
-                    keyboard: !areaPreview && !adding,
-                    interactive: !areaPreview,
+                keyboard: !areaPreview && !adding,
+                interactive: !areaPreview || lineDrawing,
+                bubblingMouseEvents: false,
                 title: feature.properties.name,
             })
                 .bindTooltip(tooltip, {
@@ -417,7 +462,7 @@ export default function MapView({
                     offset: [0, -Math.round(metrics.height * 0.8)],
                 })
                 .on("click", (event) => {
-                    if (adding) callbacksRef.current.onMapClick?.(event.latlng.lng, event.latlng.lat);
+                    if (adding || lineDrawing) callbacksRef.current.onMapClick?.(event.latlng.lng, event.latlng.lat, lineDrawing ? feature.id : null);
                     else callbacksRef.current.onSelect?.(feature.id, true);
                 })
                 .addTo(layer);
@@ -426,33 +471,35 @@ export default function MapView({
             marker.placeMarkerWidth = metrics.width;
             marker.isPlaceMarker = true;
         });
-    }, [places, types, selectedId, adding, areaPreview, editingFeature?.id]);
+    }, [places, types, selectedId, adding, areaPreview, lineDrawing, editingFeature?.id]);
 
     useEffect(() => {
         const map = mapRef.current;
         const layer = layersRef.current?.polygonEditing;
         if (!map || !layer) return undefined;
         layer.clearLayers();
-        if (!editingFeature || editGeometry?.type !== "Polygon") return undefined;
+        if (!editingFeature || !["Polygon", "LineString"].includes(editGeometry?.type)) return undefined;
 
-        let vertices = editGeometry.coordinates[0].slice(0, -1).map(([longitude, latitude]) => [longitude, latitude]);
+        const editingLine = editGeometry.type === "LineString";
+        let vertices = (editingLine ? editGeometry.coordinates : editGeometry.coordinates[0].slice(0, -1)).map(([longitude, latitude]) => [longitude, latitude]);
         const type = types.find((item) => item.id === editingFeature.properties.type);
         const color = /^#[0-9a-f]{6}$/i.test(type?.color) ? type.color : "#16785f";
 
-        const publish = () => callbacksRef.current.onEditGeometryChange?.(createPolygonDraftGeometry(vertices));
+        const publish = () => callbacksRef.current.onEditGeometryChange?.(editingLine ? { type: "LineString", coordinates: vertices.map((position) => [...position]) } : createPolygonDraftGeometry(vertices));
         const render = () => {
             layer.clearLayers();
             const latLngs = vertices.map(([longitude, latitude]) => [latitude, longitude]);
-            const polygon = L.polygon(latLngs, {
-                color, weight: 3, opacity: 1, dashArray: "7 5", fillColor: color,
-                fillOpacity: 0.28, interactive: false,
-            }).addTo(layer);
+            // ai coding：线编辑层直接构造 Polyline，避免条件式 Polygon 路径意外生成闭合 SVG。
+            const polygon = editingLine
+                ? L.polyline(latLngs, { color, weight: 4, opacity: 1, dashArray: "7 5", fill: false, interactive: false }).addTo(layer)
+                : L.polygon(latLngs, { color, weight: 3, opacity: 1, dashArray: "7 5", fillColor: color, fillOpacity: 0.28, interactive: false }).addTo(layer);
 
             // ai coding：透明加宽边线只接受边缘附近点击；再投影到最近线段后插点，区域内部点击不会误操作。
-            const edge = L.polyline([...latLngs, latLngs[0]], {
+            const edge = L.polyline(editingLine ? latLngs : [...latLngs, latLngs[0]], {
                 color, weight: 18, opacity: 0, interactive: true, bubblingMouseEvents: false,
             }).addTo(layer);
             edge.on("click", (event) => {
+                if (editingLine) return;
                 const nearest = nearestPolygonEdge(map, vertices, event.latlng);
                 if (!nearest || nearest.distance > 12) return;
                 const projected = map.layerPointToLatLng(nearest.point);
@@ -471,14 +518,14 @@ export default function MapView({
             const updateGeometry = () => {
                 const nextLatLngs = vertices.map(([lng, lat]) => [lat, lng]);
                 polygon.setLatLngs(nextLatLngs);
-                edge.setLatLngs([...nextLatLngs, nextLatLngs[0]]);
+                edge.setLatLngs(editingLine ? nextLatLngs : [...nextLatLngs, nextLatLngs[0]]);
                 publish();
             };
 
             vertices.forEach(([longitude, latitude], index) => {
                 const marker = L.marker([latitude, longitude], {
                     icon: createEditVertexIcon(), draggable: true, keyboard: true,
-                    bubblingMouseEvents: false, title: `区域顶点 ${index + 1}，可拖拽或使用方向键调整`,
+                    bubblingMouseEvents: false, title: `${editingLine ? "线" : "区域"}顶点 ${index + 1}，可拖拽或使用方向键调整`,
                     zIndexOffset: 800,
                 }).addTo(layer);
                 marker.on("drag", (event) => {
@@ -491,7 +538,7 @@ export default function MapView({
                     element.setAttribute("tabindex", "0");
                     element.setAttribute("role", "button");
                     element.setAttribute("aria-roledescription", "区域顶点控制点");
-                    element.setAttribute("aria-label", `区域顶点 ${index + 1}，可拖拽或使用方向键微调，按 Escape 取消编辑`);
+                    element.setAttribute("aria-label", `${editingLine ? "线" : "区域"}顶点 ${index + 1}，可拖拽或使用方向键微调，按 Escape 取消编辑`);
                     element.addEventListener("keydown", (event) => {
                         const offset = {
                             ArrowUp: [0, -1], ArrowDown: [0, 1],
@@ -555,8 +602,9 @@ export default function MapView({
         const latLngs = drawCoordinates.map(([longitude, latitude]) => [latitude, longitude]);
         const distinctCount = new Set(drawCoordinates.map(([longitude, latitude]) => `${longitude},${latitude}`)).size;
         if (latLngs.length > 1) {
-            if (areaDrawing) L.polyline(latLngs, {
-                color: "#0e6f59", weight: 3, opacity: 0.9, interactive: false,
+            // ai coding：线从绘制中到待保存都只创建开放 Polyline；只有区域待保存态才创建 Polygon 填充层。
+            if (drawGeometryType === "LineString" || areaDrawing) L.polyline(latLngs, {
+                color: "#0e6f59", weight: 3, opacity: 0.9, fill: false, interactive: false,
             }).addTo(layer);
             else L.polygon(latLngs, {
                 color: "#0e6f59", weight: 3, opacity: 0.9, dashArray: "7 6",
@@ -567,8 +615,8 @@ export default function MapView({
         drawCoordinates.forEach(([longitude, latitude], index) => {
             const first = index === 0; const canClose = first && distinctCount >= 3;
             const vertex = L.circleMarker([latitude, longitude], {
-                radius: first ? 8 : 5, color: first ? "#0e5f4b" : "#fff", weight: first ? 3 : 2,
-                fillColor: first ? "#fff" : "#16785f", fillOpacity: 1, interactive: first && areaDrawing,
+                radius: first && !lineDrawing ? 8 : 5, color: first && !lineDrawing ? "#0e5f4b" : "#fff", weight: first && !lineDrawing ? 3 : 2,
+                fillColor: first && !lineDrawing ? "#fff" : "#16785f", fillOpacity: 1, interactive: first && areaDrawing,
                 bubblingMouseEvents: false,
             }).addTo(layer);
             if (first && areaDrawing) {
@@ -582,7 +630,7 @@ export default function MapView({
                 }
             }
         });
-    }, [areaDrawing, areaPreview, drawCoordinates]);
+    }, [areaDrawing, lineDrawing, areaPreview, drawCoordinates, drawGeometryType]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -590,11 +638,11 @@ export default function MapView({
         const container = containerRef.current;
         if (!map || !layer || !container) return undefined;
         layer.clearLayers();
-        if (!areaDrawing) return undefined;
+        if (!areaDrawing && !lineDrawing) return undefined;
 
         // ai coding：mousemove 直接更新独立 Leaflet 临时层，避免高频 setState 重绘应用；离图或结束绘制即彻底清理。
         const handleMouseMove = (event) => {
-            drawCursorPreview(layer, drawCoordinatesRef.current ?? [], event.latlng);
+            drawCursorPreview(layer, drawCoordinatesRef.current ?? [], event.latlng, lineDrawing);
         };
         const hideCursorPreview = () => layer.clearLayers();
         map.on("mousemove", handleMouseMove);
@@ -604,19 +652,23 @@ export default function MapView({
             container.removeEventListener("mouseleave", hideCursorPreview);
             layer.clearLayers();
         };
-    }, [areaDrawing]);
+    }, [areaDrawing, lineDrawing]);
 
     useEffect(() => {
-        containerRef.current?.classList.toggle("adding-place", adding || areaDrawing);
+        containerRef.current?.classList.toggle("adding-place", adding || areaDrawing || lineDrawing);
         containerRef.current?.classList.toggle("adding-point", adding);
+        containerRef.current?.classList.toggle("adding-line", lineDrawing);
         containerRef.current?.classList.toggle("editing-area", Boolean(editingFeature));
-    }, [adding, areaDrawing, editingFeature]);
+    }, [adding, areaDrawing, lineDrawing, editingFeature]);
     useEffect(() => {
         if (!selectedId) return;
         const feature = places.features.find((item) => item.id === selectedId);
         if (feature) {
             if (feature.geometry.type === "Point") mapRef.current?.panTo([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]);
-            else mapRef.current?.panTo(L.polygon(feature.geometry.coordinates[0].map(([longitude, latitude]) => [latitude, longitude])).getBounds().getCenter());
+            else {
+                const coordinates = feature.geometry.type === "LineString" ? feature.geometry.coordinates : feature.geometry.coordinates[0];
+                mapRef.current?.panTo(L.polyline(coordinates.map(([longitude, latitude]) => [latitude, longitude])).getBounds().getCenter());
+            }
         }
     }, [selectedId, places]);
 

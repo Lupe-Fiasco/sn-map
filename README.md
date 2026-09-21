@@ -11,13 +11,17 @@ npm run build
 
 更新全部 OSM 范围与道路数据：`npm run build:map-data`；也可追加 `-- --region suining` 或 `-- --region xuhui`。脚本按地区行政边界配置查询 Overpass 并原子更新 `public/data/regions/<slug>/`；运行时不会请求 Overpass。
 
-当前睢宁道路缓存已成功重建。徐汇区已提供可切换的地区配置与空 seed；本次构建时公共 Overpass 先后返回 429/504，因此 `base-roads.geojson` 保留带 `generation_status` 的空 FeatureCollection，没有伪造道路。服务恢复后运行 `npm run build:map-data -- --region xuhui` 会按 OSM `boundary=administrative + admin_level=6 + name=徐汇区` 关系 bbox 重算范围并生成道路缓存。
+当前睢宁与徐汇道路缓存均为已生成的非空只读 FeatureCollection；徐汇仍使用独立空地点 seed，不会伪造或导入睢宁用户地点。需要人工刷新时运行 `npm run build:map-data -- --region xuhui`，脚本会按 OSM `boundary=administrative + admin_level=6 + name=徐汇区` 关系 bbox 重算范围并生成道路缓存。
 
 ## Supabase 初始化
 
+> 按文件名顺序执行至 `202609270015_sync_linestring_property_types.sql`。013 只把私有 `places` 中旧 `linear-feature` LineString 迁移为 `road`，不删除地点且不改写历史公开快照；014 为已执行旧版 011 的环境重建安全几何函数与约束，统一拒绝闭合 LineString；015 为已执行旧版 013 的环境补齐 LineString 双层 type。
+
 1. 复制 `.env.example` 为 `.env.local` 并填写项目 URL 与 publishable key。
 2. 在 Supabase 控制台启用 Authentication 的邮箱密码登录；如需保留兼容模式，同时启用 Anonymous Sign-Ins。按部署域名配置邮箱确认跳转 URL。
-3. **先完整备份数据库和两个 Storage bucket**，再按文件名顺序执行 `supabase/migrations/` 的 **001–010**。009 必须在 001–008 全部完成后执行；它会创建全局 `maps`、把既有地点/快照/图片安全回填为 `suining`，并把唯一键、外键、RPC 和新图片路径升级为 owner + map 范围。**010 必须在 009 后执行且可重复执行**，它不改写或删除数据，只替换两个图片 bucket 的 Storage CRUD policy：私有对象读改删必须精确关联 `place_images.storage_path + owner/map/place`，公开副本读改删必须关联同一图片元数据的 `owner/map/place/image`。新版私有对象使用 `owner/map/place/file` 四段路径，公开副本使用 `owner/map/release/place/file` 五段路径；旧睢宁三/四段对象仅在 `place_images` 元数据确定 `map_id=suining` 且 owner/place/image 一致时兼容，不能只凭 owner 路径首段访问。上传仍只允许非匿名且已批准账号或管理员；匿名访客只走公开 bucket URL 与安全 RPC，不能写改删。前置 schema 不符合预期时事务会清晰中止，不猜测或删除远程数据。本仓库不会远程执行 migration。
+3. **先完整备份数据库和两个 Storage bucket**，再按文件名顺序执行 `supabase/migrations/` 的 **001–015**。009 必须在 001–008 全部完成后执行；它会创建全局 `maps`、把既有地点/快照/图片安全回填为 `suining`，并把唯一键、外键、RPC 和新图片路径升级为 owner + map 范围。010 在 009 后收紧两个图片 bucket 的完整 CRUD。011 在 010 后加入 Point、开放 LineString、Polygon 的统一几何校验、同 owner + map Point 关联约束及公开 geometry 白名单；012 继续保护关联 Point 的 owner/map 范围，013 拆分线类型。014 可重复重建几何安全函数和 places/公开快照约束，兼容已执行旧版 011 的环境；它会在任何函数/约束 DDL 前同时预检 places 与快照，发现闭合线即明确中止且不安装任何对象。015 随后仅将 LineString 的 `properties.type` 安全同步为表列 `type`，用于修复旧版 013 遗漏或不一致的数据，不改 Point、Polygon 或快照。新版私有对象使用 `owner/map/place/file` 四段路径，公开副本使用 `owner/map/release/place/file` 五段路径；旧睢宁三/四段对象仅在元数据确定 owner/map/place/image 一致时兼容。上传仍只允许非匿名且已批准账号或管理员；匿名访客只走公开 bucket URL 与安全 RPC。本仓库不会远程执行 migration。
+
+执行 014 前必须查询 `places(owner_id,map_id,id,geometry)`，并展开查询 `map_snapshots(owner_id,map_id,snapshot.features[*].id/geometry)`，确认两处均不存在 geometry 为 LineString 且首尾坐标相同的记录。任一处存在即为阻塞条件：先保留完整备份，再逐条按真实业务人工修复；合法 LineString 至少有 2 个不同顶点且首尾不同，只有确认业务对象实际为区域时才可重建为至少 3 个不同顶点的闭合单外环 Polygon。不得猜测修改形状或删除快照。014 自身会重复执行同一前置检查并报告 places 行数与快照 feature 数；清理完成后重新执行 014，再执行 015。
 4. 先注册并完成管理员账号的邮箱确认，再由项目所有者在 **Supabase SQL Editor** 手动执行以下 bootstrap。把占位文本替换为自己的管理员邮箱；不要把真实邮箱或任何凭据写入仓库。该 SQL 只绑定已经存在的 `auth.users.id`，可安全重复执行：
 
 ```sql
@@ -31,7 +35,7 @@ on conflict (user_id) do nothing;
 
 管理页支持 Supabase 邮箱+密码注册、登录和退出，并保留匿名 session 兼容。**邮箱确认与人工审核是两个步骤**。`maps` 是全局只读地区配置，不按 owner 重复；`places` 使用 `(owner_id, map_id, id)`，`map_snapshots` 使用 `(owner_id, map_id)`，图片元数据/对象路径同样包含 map。客户端查询显式携带 owner + map，RLS 继续执行 owner 与审核门禁。注册/登录不会猜测、合并或覆盖匿名 owner 的数据。
 
-用户地点采用 WGS84 GeoJSON Point/Polygon，坐标顺序为 `[经度, 纬度]`。运行时单一静态来源是 `public/data/regions/<slug>/` 下的 `map-config.json`、`base-roads.geojson` 和 `places.geojson`；根目录旧文件只保留兼容。每个 owner + map 只执行一次对应 seed，徐汇区空 seed 不会导入睢宁数据。localStorage 草稿、seed 标记和同步基线均按 owner + map 隔离；文件句柄只保留到离开当前地图或退出页面为止，返回该地图必须重新选择文件。导出文件名包含 map slug，所选文件绝不会反向覆盖云端。
+用户地点采用 WGS84 GeoJSON Point/LineString/Polygon，坐标顺序为 `[经度, 纬度]`。LineString 是至少 2 个不同顶点的单条开放线，可关联同 owner + map 的已有 Point；Polygon 是至少 3 个不同顶点的闭合单外环。不支持曲线、多线、洞或多部件。运行时单一静态来源是 `public/data/regions/<slug>/` 下的 `map-config.json`、`base-roads.geojson` 和 `places.geojson`；根目录旧文件只保留兼容。每个 owner + map 只执行一次对应 seed，徐汇区不会导入睢宁数据。localStorage 草稿、seed 标记和同步基线均按 owner + map 隔离；文件句柄只保留到离开当前地图或退出页面为止，返回该地图必须重新选择文件。导出文件名包含 map slug，所选文件绝不会反向覆盖云端。
 
 ## 公开只读快照
 
@@ -39,7 +43,7 @@ on conflict (user_id) do nothing;
 
 已保存地点可上传 JPG/PNG/WebP 实景图片（单张不超过 5MB）。原图保存在私有 `place-images` bucket，只有已审核正式账号或管理员本人可管理，图片不会写入 places/GeoJSON；匿名兼容账号不能读取、上传或选择含图片的第三级。第三级仅在当前正式地点有图片时可选，发布时会用 Canvas/ImageBitmap 将原图重新编码为 WebP（失败不会回退上传原图），再复制到 `published-place-images`；快照只保存图片 id、替代文本和可由服务端校验的公开对象路径，RPC 会对照 owner/place/image 元数据与 bucket 对象重建白名单响应。重新发布会按当前级别替换图片范围，改为较低级别或取消公开会尽力删除旧公开副本；已被浏览器/CDN 缓存或第三方复制的 URL 无法保证绝对收回。浏览器重编码不是可验证的绝对安全边界；如需服务端验证像素转码，应后续增加受信任 Edge Function，且不得在浏览器使用 `service_role`。
 
-**只有依次执行 004–010 migration 后才允许启用多地区带图片公开分享。** 009 在既有安全级别上增加 map 范围并让 RPC 返回对应地区配置，010 收紧两个图片 bucket 的完整 CRUD 且不覆盖 006/007/008 的安全最终状态。历史快照需在管理端明确选择级别并重新发布。分享页在 Auth/profile/admin 初始化之前独立分流，无需登录、不创建匿名会话，也不受账号审核状态影响；页面隐藏全部维护、文件同步和发布功能。客户端只使用 publishable key，禁止配置或暴露 `service_role`。
+**只有依次执行 004–015 migration 后才允许启用含线地点的多地区公开分享。** 009 增加 map 范围并让 RPC 返回对应地区配置，010 收紧两个图片 bucket 的完整 CRUD，011 延续字段/图片白名单并允许三种受校验 geometry，012–013 依序保护关联范围并拆分线类型，014 确保 places、公开快照和 RPC 共用的几何函数拒绝闭合 LineString，015 补齐 LineString 双层 type。`contained_place_ids` 不进入公开快照，避免由关系自动泄露私有地点。历史快照需在管理端明确选择级别并重新发布。分享页在 Auth/profile/admin 初始化之前独立分流，无需登录、不创建匿名会话，也不受账号审核状态影响；页面隐藏全部维护、文件同步和发布功能。客户端只使用 publishable key，禁止配置或暴露 `service_role`。
 
 ### 旧版 places 手动升级
 

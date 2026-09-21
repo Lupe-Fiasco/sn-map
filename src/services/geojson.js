@@ -1,7 +1,9 @@
+import { isTypeAllowedForGeometry } from "./placeTypes.js";
+
 export const emptyCollection = () => ({ type: "FeatureCollection", name: "user-maintained-places", features: [] });
 
 export function validatePosition(position, context = "地点") {
-  if (!Array.isArray(position) || position.length < 2) throw new Error(`${context}坐标无效`);
+  if (!Array.isArray(position) || position.length !== 2) throw new Error(`${context}坐标无效`);
   const [longitude, latitude] = position;
   if (!Number.isFinite(longitude) || !Number.isFinite(latitude)) throw new Error(`${context}经纬度必须是有限数值`);
   if (longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90) throw new Error(`${context}经纬度超出 WGS84 有效范围`);
@@ -16,6 +18,22 @@ function validatePolygon(coordinates, context) {
   if (first[0] !== last[0] || first[1] !== last[1]) throw new Error(`${context}的多边形外环未闭合`);
   const distinct = new Set(ring.slice(0, -1).map(([longitude, latitude]) => `${longitude},${latitude}`));
   if (distinct.size < 3) throw new Error(`${context}的多边形至少需要 3 个不同顶点`);
+}
+
+function validateLineString(coordinates, context) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) throw new Error(`${context}的线至少需要 2 个顶点`);
+  coordinates.forEach((position) => validatePosition(position, context));
+  const distinct = new Set(coordinates.map(([longitude, latitude]) => `${longitude},${latitude}`));
+  if (distinct.size < 2) throw new Error(`${context}的线至少需要 2 个不同顶点`);
+  // ai coding：LineString 必须保持开放，拒绝首尾相同的闭合路径进入内存、云端或公开快照链路。
+  const first = coordinates[0]; const last = coordinates.at(-1);
+  if (first[0] === last[0] && first[1] === last[1]) throw new Error(`${context}的线不能闭合`);
+}
+
+export function validateLineStringGeometry(geometry, context = "线") {
+  if (geometry?.type !== "LineString") throw new Error(`${context}必须是 LineString`);
+  validateLineString(geometry.coordinates, context);
+  return geometry;
 }
 
 export function validatePolygonGeometry(geometry, context = "区域") {
@@ -45,13 +63,13 @@ export function insertPolygonVertex(geometry, segmentIndex, position) {
   return createPolygonDraftGeometry(vertices);
 }
 
-export function validatePlaces(data, placeTypes) {
+export function validatePlaces(data, placeTypes, { validateContainedReferences = true } = {}) {
   if (data?.type !== "FeatureCollection" || !Array.isArray(data.features)) throw new Error("不是有效的 GeoJSON FeatureCollection");
   const configuredTypes = new Set(placeTypes.map(({ id }) => id));
   const ids = new Set();
   data.features.forEach((feature, index) => {
     const context = `第 ${index + 1} 个地点`;
-    if (feature?.type !== "Feature" || !["Point", "Polygon"].includes(feature?.geometry?.type)) throw new Error(`${context}必须是 Point 或 Polygon Feature`);
+    if (feature?.type !== "Feature" || !["Point", "LineString", "Polygon"].includes(feature?.geometry?.type)) throw new Error(`${context}必须是 Point、LineString 或 Polygon Feature`);
     // ai coding：原始 Feature 必须自行携带一致的双层 id 和 user 来源，禁止依赖后续标准化修补非法数据。
     const hasFeatureId = Object.hasOwn(feature, "id");
     const hasPropertyId = Object.hasOwn(feature.properties ?? {}, "id");
@@ -63,10 +81,22 @@ export function validatePlaces(data, placeTypes) {
     if (!id || ids.has(id)) throw new Error(`${context}${id ? "的 id 重复" : "缺少稳定唯一 id"}`);
     ids.add(id);
     if (feature.geometry.type === "Point") validatePosition(feature.geometry.coordinates, context);
+    else if (feature.geometry.type === "LineString") validateLineString(feature.geometry.coordinates, context);
     else validatePolygon(feature.geometry.coordinates, context);
     if (!String(feature.properties?.name ?? "").trim()) throw new Error(`${context}缺少 name`);
     if (typeof feature.properties?.type !== "string" || !configuredTypes.has(feature.properties.type)) throw new Error(`${context}的 type 未在 place-types.json 中配置`);
+    // ai coding：类型合法性同时受 geometry 约束，避免 Point/Polygon 冒用线类型或新 LineString 回退到普通点类型。
+    if (!isTypeAllowedForGeometry(feature.properties.type, feature.geometry.type)) throw new Error(`${context}的 type 不适用于 ${feature.geometry.type}`);
     if (feature.properties.source !== "user") throw new Error(`${context}的 source 必须是 user`);
+  });
+  // ai coding：一个集合代表同一 owner + map；线只能引用集合内已经存在的 Point，且关系 id 去重。
+  const featuresById = new Map(data.features.map((feature) => [String(feature.id), feature]));
+  data.features.forEach((feature, index) => {
+    const contained = feature.properties?.contained_place_ids;
+    if (contained === undefined) return;
+    if (feature.geometry.type !== "LineString" || !Array.isArray(contained)) throw new Error(`第 ${index + 1} 个地点的 contained_place_ids 仅允许用于 LineString`);
+    if (contained.some((id) => typeof id !== "string" || !id.trim()) || new Set(contained).size !== contained.length) throw new Error(`第 ${index + 1} 个地点的 contained_place_ids 必须是无重复的有效 id`);
+    if (validateContainedReferences && contained.some((id) => featuresById.get(id)?.geometry?.type !== "Point")) throw new Error(`第 ${index + 1} 个地点只能包含当前地图中已存在的 Point 地点`);
   });
   return data;
 }
@@ -135,12 +165,29 @@ export function getPolygonRepresentativeCoordinate(geometry) {
   return coordinate;
 }
 
+export function getLineStringRepresentativeCoordinate(geometry) {
+  validateLineStringGeometry(geometry);
+  const coordinate = [
+    geometry.coordinates.reduce((sum, [longitude]) => sum + longitude, 0) / geometry.coordinates.length,
+    geometry.coordinates.reduce((sum, [, latitude]) => sum + latitude, 0) / geometry.coordinates.length,
+  ];
+  validatePosition(coordinate, "线代表");
+  return coordinate;
+}
+
+export function getGeometryRepresentativeCoordinate(geometry) {
+  if (geometry?.type === "Point") { validatePosition(geometry.coordinates); return geometry.coordinates.slice(0, 2); }
+  if (geometry?.type === "LineString") return getLineStringRepresentativeCoordinate(geometry);
+  return getPolygonRepresentativeCoordinate(geometry);
+}
+
 export function createPlace(values, existing) {
   const now = new Date().toISOString();
   const id = existing?.id ?? globalThis.crypto?.randomUUID?.() ?? `place-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const geometry = values.geometry ?? (existing?.geometry?.type === "Polygon" ? existing.geometry : { type: "Point", coordinates: [values.longitude, values.latitude] });
+  // ai coding：新增 Point 没有 existing；只有编辑既有非 Point 要素时才沿用其 geometry，避免读取 null.geometry。
+  const geometry = values.geometry ?? (existing?.geometry && existing.geometry.type !== "Point" ? existing.geometry : { type: "Point", coordinates: [values.longitude, values.latitude] });
   const geometryChanged = !existing || canonicalJson(existing.geometry) !== canonicalJson(geometry);
-  const representative = geometry.type === "Polygon" && geometryChanged ? getPolygonRepresentativeCoordinate(geometry) : null;
+  const representative = geometry.type !== "Point" && geometryChanged ? getGeometryRepresentativeCoordinate(geometry) : null;
   return {
     type: "Feature", id,
     // ai coding：区域沿用标准 GeoJSON 闭合外环；编辑地点信息时保持原有几何不变。
@@ -149,6 +196,7 @@ export function createPlace(values, existing) {
       ...(existing?.properties ?? {}), id, source: "user", name: values.name, type: values.type,
       address: values.address, phone: values.phone, description: values.description,
       ...(representative ? { longitude: representative[0], latitude: representative[1] } : {}),
+      ...(geometry.type === "LineString" ? { contained_place_ids: [...new Set(values.contained_place_ids ?? existing?.properties?.contained_place_ids ?? [])] } : {}),
       createdAt: existing?.properties.createdAt ?? now, updatedAt: now,
     },
   };

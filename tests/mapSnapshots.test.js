@@ -14,7 +14,11 @@ const polygon = {
   type: "Feature", id: "b", geometry: { type: "Polygon", coordinates: [[[117, 33], [118, 33], [118, 34], [117, 33]]] },
   properties: { id: "b", name: "测试区域", type: "park", longitude: 117.6, latitude: 33.4, description: "区域备注", source: "user" },
 };
-const collection = { type: "FeatureCollection", features: [point, polygon] };
+const line = {
+  type: "Feature", id: "c", geometry: { type: "LineString", coordinates: [[117.8, 33.8], [118, 34]] },
+  properties: { id: "c", name: "测试线", type: "park", contained_place_ids: ["a"], description: "线备注", source: "user" },
+};
+const collection = { type: "FeatureCollection", features: [point, polygon, line] };
 
 test("creates URL-safe tokens and clones the published collection", () => {
   assert.equal(createShareToken(() => "12345678-1234-1234-1234-123456789abc"), "12345678123412341234123456789abc");
@@ -74,6 +78,15 @@ test("published Polygon coordinates fall back to the representative center", () 
     [snapshot.features[0].properties.longitude, snapshot.features[0].properties.latitude],
     [117.66666666666667, 33.333333333333336],
   );
+});
+
+test("published LineString keeps geometry and an approximate center without contained ids", () => {
+  const snapshot = createPublicSnapshot(collection, SNAPSHOT_PRESETS.details);
+  const published = snapshot.features.find((feature) => feature.id === "c");
+  assert.deepEqual(published.geometry, line.geometry);
+  assert.deepEqual([published.properties.longitude, published.properties.latitude], [117.9, 33.9]);
+  assert.equal(Object.hasOwn(published.properties, "contained_place_ids"), false);
+  assert.equal(published.properties.description, "线备注");
 });
 
 test("fixed levels never allow type or coordinates to be removed", () => {

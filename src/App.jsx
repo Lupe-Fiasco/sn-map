@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import PlaceList from "./components/PlaceList.jsx";
 import PlaceForm from "./components/PlaceForm.jsx";
@@ -9,10 +9,12 @@ import SnapshotCard from "./components/SnapshotCard.jsx";
 import SharePage from "./components/SharePage.jsx";
 import ApprovalGate from "./components/ApprovalGate.jsx";
 import AdminPanel from "./components/AdminPanel.jsx";
+import FormErrorBoundary from "./components/FormErrorBoundary.jsx";
 import { usePlaces } from "./hooks/usePlaces.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { resolveAppRoute } from "./services/approval.js";
 import { loadMapConfigs } from "./services/maps.js";
+import { finishAreaDrawing, finishLineDrawing } from "./services/lineDrawing.js";
 import {
     forgetSessionFileHandle,
     getSessionFileHandle,
@@ -63,6 +65,7 @@ function ApprovedManagementApp({ auth }) {
     const [newCoordinates, setNewCoordinates] = useState(null);
     const [drawCoordinates, setDrawCoordinates] = useState([]);
     const [newGeometry, setNewGeometry] = useState(null);
+    const [containedPlaceIds, setContainedPlaceIds] = useState([]);
     const [editGeometry, setEditGeometry] = useState(null);
     const [query, setQuery] = useState("");
     const [typeFilter, setTypeFilter] = useState("");
@@ -70,6 +73,9 @@ function ApprovedManagementApp({ auth }) {
     const [fileStatus, setFileStatus] = useState("");
     const [toast, setToast] = useState("");
     const [mapErrors, setMapErrors] = useState({ bounds: "", roads: "" });
+    const workspaceRef = useRef(null);
+    const mapPanelRef = useRef(null);
+    const mapHeaderRef = useRef(null);
     const syncRunRef = useRef(0);
     const syncingRef = useRef(false);
     const busy = syncing || cloud.saving || auth.status.loading || (auth.configured && !auth.session);
@@ -77,7 +83,7 @@ function ApprovedManagementApp({ auth }) {
         () => places.features.find((item) => item.id === selectedId) ?? null,
         [places, selectedId],
     );
-    const areaPreview = mode === "drawing-area" || newGeometry?.type === "Polygon" || (mode === "editing" && editGeometry?.type === "Polygon");
+    const geometryPreview = ["drawing-area", "drawing-line"].includes(mode) || Boolean(newGeometry) || (mode === "editing" && Boolean(editGeometry));
     const drawDistinctCount = useMemo(
         () => new Set(drawCoordinates.map(([longitude, latitude]) => `${longitude},${latitude}`)).size,
         [drawCoordinates],
@@ -96,6 +102,7 @@ function ApprovedManagementApp({ auth }) {
         setDrawCoordinates([]);
         setNewGeometry(null);
         setEditGeometry(null);
+        setContainedPlaceIds([]);
     }, []);
     useEffect(() => {
         // ai coding：owner 或地图切换时关闭旧范围的详情及所有几何草稿，并立即废弃进行中的文件同步。
@@ -118,26 +125,49 @@ function ApprovedManagementApp({ auth }) {
         setQuery("");
         setTypeFilter("");
     }, [mapId]);
+    useLayoutEffect(() => {
+        const workspace = workspaceRef.current;
+        const mapPanel = mapPanelRef.current;
+        const mapHeader = mapHeaderRef.current;
+        if (!workspace || !mapPanel || !mapHeader) return undefined;
+        // ai coding：以实际地图头部（含动态道路错误）高度驱动侧栏偏移，避免复制标题或提示高度常量。
+        const alignSidebar = () => {
+            const offset = mapHeader.getBoundingClientRect().bottom - mapPanel.getBoundingClientRect().top;
+            workspace.style.setProperty("--map-content-offset", `${Math.max(0, offset)}px`);
+        };
+        alignSidebar();
+        const observer = new ResizeObserver(alignSidebar);
+        observer.observe(mapHeader);
+        return () => observer.disconnect();
+    }, []);
     const closeArea = useCallback(() => {
-        const distinct = new Set(drawCoordinates.map(([longitude, latitude]) => `${longitude},${latitude}`));
-        if (distinct.size < 3) return notify("至少绘制 3 个不同顶点后才能闭合区域");
-        // ai coding：只在闭合时生成标准 Polygon 外环，未完成绘制始终不进入地点数据。
-        setNewGeometry({ type: "Polygon", coordinates: [[...drawCoordinates, drawCoordinates[0]]] });
+        const result = finishAreaDrawing(drawCoordinates);
+        if (!result.geometry) return notify(result.message);
+        // ai coding：首点、Enter 与区域右键共用纯逻辑闭合入口，未达 3 个不同顶点时只提示且保留绘制状态。
+        setNewGeometry(result.geometry);
         setMode("creating");
-        notify("区域已闭合，请填写地点信息后保存");
+        notify(result.message);
+    }, [drawCoordinates, notify]);
+    const closeLine = useCallback(() => {
+        const result = finishLineDrawing(drawCoordinates);
+        if (!result.geometry) return notify(result.message);
+        setNewGeometry(result.geometry);
+        setDrawCoordinates(result.geometry.coordinates);
+        setMode("creating");
+        notify(result.message);
     }, [drawCoordinates, notify]);
     useEffect(() => {
         const keydown = (event) => {
             if (event.key === "Escape" && mode !== "browse") closePanel();
-            else if (event.key === "Enter" && mode === "drawing-area") {
+            else if (event.key === "Enter" && (mode === "drawing-area" || mode === "drawing-line")) {
                 // ai coding：地图控件及绘制首点自行处理 Enter，不触发全局闭合快捷键。
                 if (event.target instanceof Element && event.target.closest("a, button, input, select, textarea, [contenteditable='true'], [role='button'], [role='option']")) return;
-                event.preventDefault(); closeArea();
+                event.preventDefault(); mode === "drawing-line" ? closeLine() : closeArea();
             }
         };
         document.addEventListener("keydown", keydown);
         return () => document.removeEventListener("keydown", keydown);
-    }, [mode, closePanel, closeArea]);
+    }, [mode, closePanel, closeArea, closeLine]);
 
     const selectPlace = useCallback((id) => {
         setEditGeometry(null);
@@ -145,16 +175,21 @@ function ApprovedManagementApp({ auth }) {
         setMode("details");
     }, []);
     const mapClick = useCallback(
-        (longitude, latitude) => {
+        (longitude, latitude, pointId = null) => {
             if (busy) return;
             if (mode === "adding") {
                 setNewCoordinates([longitude, latitude]);
                 setMode("creating");
             } else if (mode === "drawing-area") {
                 setDrawCoordinates((current) => [...current, [longitude, latitude]]);
+            } else if (mode === "drawing-line") {
+                setDrawCoordinates((current) => [...current, [longitude, latitude]]);
+                if (pointId && places.features.some((item) => item.id === pointId && item.geometry.type === "Point")) {
+                    setContainedPlaceIds((current) => current.includes(pointId) ? current : [...current, pointId]);
+                }
             }
         },
-        [mode, busy],
+        [mode, busy, places],
     );
     // ai coding：新增点表单是坐标输入的唯一编辑源；这里只保存可供 Leaflet 安全预览的最新 WGS84 坐标。
     const updatePendingCoordinates = useCallback((longitudeValue, latitudeValue) => {
@@ -202,16 +237,26 @@ function ApprovedManagementApp({ auth }) {
             notify("请连续点击区域顶点；点击首点或按 Enter 闭合，Escape 取消");
         }
     };
+    const toggleLineDrawing = () => {
+        if (busy) return notify("数据保存进行中，请稍候");
+        if (mode === "drawing-line") closePanel();
+        else {
+            setMode("drawing-line"); setSelectedId(null); setNewCoordinates(null);
+            setNewGeometry(null); setEditGeometry(null); setDrawCoordinates([]); setContainedPlaceIds([]);
+            notify("请连续点击线顶点；至少 2 个不同顶点后按 Enter 或鼠标右键结束，Escape 取消");
+        }
+    };
     const savePlace = async (values) => {
         if (busy) throw new Error("数据保存进行中，请稍候");
         const editing = mode === "editing";
-        const { feature, draftSaved, cloudSaved } = await save(values, editing ? selected : null);
+        const { feature, draftSaved, cloudSaved } = await save({ ...values, contained_place_ids: values.contained_place_ids ?? containedPlaceIds }, editing ? selected : null);
         setSelectedId(feature.id);
         setMode("details");
         setNewCoordinates(null);
         setDrawCoordinates([]);
         setNewGeometry(null);
         setEditGeometry(null);
+        setContainedPlaceIds([]);
         // ai coding：正式内存状态与浏览器暂存结果分别反馈，写入失败时明确提醒刷新风险。
         notify(cloudSaved
             ? `${editing ? "地点已更新" : "地点已添加"}并保存到云端${draftSaved ? "" : "，但本地草稿写入失败"}`
@@ -220,8 +265,9 @@ function ApprovedManagementApp({ auth }) {
                 : `${editing ? "地点已更新" : "地点已添加"}，但本地暂存失败；刷新页面可能丢失本次修改`));
     };
     const editPlace = () => {
-        // ai coding：Polygon 编辑从正式 geometry 建立隔离的内存草稿；Point 编辑继续沿用原有表单流程。
-        setEditGeometry(selected?.geometry.type === "Polygon" ? structuredClone(selected.geometry) : null);
+        // ai coding：Polygon/LineString 编辑从正式 geometry 建立隔离草稿；Point 继续沿用坐标表单。
+        setEditGeometry(selected?.geometry.type !== "Point" ? structuredClone(selected.geometry) : null);
+        setContainedPlaceIds(selected?.geometry.type === "LineString" ? [...(selected.properties.contained_place_ids ?? [])] : []);
         setMode("editing");
     };
     const deletePlace = async () => {
@@ -353,13 +399,18 @@ function ApprovedManagementApp({ auth }) {
                         </select>
                         <small>{mapConfig ? `已选择 · ${mapConfig.name}` : "正在加载地区配置…"}</small>
                     </label>
-                    <AuthCard session={auth.session} auth={auth} placeCount={places.features.length} onExport={exportPlaces} />
                 </div>
             </header>
-            <main>
+            {/* ai coding：账号与管理员能力独立置顶，地图工作区侧栏不再因管理员卡片而下移。 */}
+            <div className={`top-card-row ${auth.access.isAdmin ? "has-admin" : ""}`}>
+                <AuthCard session={auth.session} auth={auth} placeCount={places.features.length} onExport={exportPlaces} />
+                {auth.access.isAdmin && <AdminPanel key={auth.access.ownerId} ownerId={auth.access.ownerId} />}
+            </div>
+            <main ref={workspaceRef} className="management-workspace">
                 {/* ai coding：公开快照跟随地图主列排列，避免继续占用地点维护侧栏。 */}
                 <div className="map-column">
-                <section className="map-panel" aria-labelledby="map-title">
+                <section ref={mapPanelRef} className="map-panel" aria-labelledby="map-title">
+                    <div ref={mapHeaderRef} className="map-header">
                     <div className="panel-heading">
                         <h2 id="map-title">地图视图</h2>
                         <div className="map-actions">
@@ -377,6 +428,15 @@ function ApprovedManagementApp({ auth }) {
                                     : "＋ 新增地点"}
                             </button>
                             <button
+                                className={`button ${mode === "drawing-line" ? "" : "primary"}`}
+                                type="button"
+                                disabled={!bounds || placeLoad.loading || busy}
+                                onClick={toggleLineDrawing}
+                                aria-pressed={mode === "drawing-line"}
+                            >
+                                {mode === "drawing-line" ? "退出线绘制" : "⌁ 新增线"}
+                            </button>
+                            <button
                                 className={`button ${mode === "drawing-area" ? "" : "primary"}`}
                                 type="button"
                                 disabled={!bounds || placeLoad.loading || busy}
@@ -390,6 +450,7 @@ function ApprovedManagementApp({ auth }) {
                     {mapErrors.roads && (
                         <p className="map-error" role="alert">{mapErrors.roads}</p>
                     )}
+                    </div>
                     {mapConfigError || mapErrors.bounds ? (
                         <div id="map" className="map-loading" role="alert">
                             {mapConfigError || mapErrors.bounds}
@@ -397,6 +458,7 @@ function ApprovedManagementApp({ auth }) {
                     ) : bounds ? (
                          <MapView
                             key={mapId}
+                            mapId={mapId}
                              bounds={bounds}
                             mapName={mapConfig.name}
                             baseRoadsPath={mapConfig.base_roads_path}
@@ -406,10 +468,13 @@ function ApprovedManagementApp({ auth }) {
                             pendingCoordinates={mode === "creating" && !newGeometry ? newCoordinates : null}
                             adding={mode === "adding"}
                             areaDrawing={mode === "drawing-area"}
-                            areaPreview={areaPreview}
+                             areaPreview={geometryPreview}
+                             lineDrawing={mode === "drawing-line"}
+                             drawGeometryType={mode === "drawing-line" || newGeometry?.type === "LineString" ? "LineString" : "Polygon"}
                             drawCoordinates={drawCoordinates}
                             onMapClick={mapClick}
-                            onCloseArea={closeArea}
+                             onCloseArea={closeArea}
+                             onFinishLine={closeLine}
                             onSelect={selectPlace}
                             onRoadStatus={roadStatus}
                             editingFeature={mode === "editing" && editGeometry ? selected : null}
@@ -426,7 +491,6 @@ function ApprovedManagementApp({ auth }) {
                     <SnapshotCard key={`${auth.session?.user?.id ?? "no-owner"}:${mapId}`} ownerId={auth.session?.user?.id} mapId={mapId} mapName={mapConfig?.name} imagesEnabled={!auth.session?.user?.is_anonymous && (auth.access.state === "approved" || auth.access.isAdmin)} places={places} cloud={cloud} />
                 </div>
                 <aside className="info-panel" aria-label="地点维护面板">
-                    {auth.access.isAdmin && <AdminPanel key={auth.access.ownerId} ownerId={auth.access.ownerId} />}
                     <section
                         className="place-card"
                         aria-labelledby="places-title"
@@ -444,6 +508,13 @@ function ApprovedManagementApp({ auth }) {
                             <div className="drawing-status" role="status" aria-live="polite">
                                 <b>正在绘制区域</b>
                                 <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 3 ? `至少还需添加 ${3 - drawDistinctCount} 个顶点。` : "点击首点或按 Enter 闭合。"}</span>
+                                <button className="button" type="button" onClick={closePanel}>取消绘制</button>
+                            </div>
+                        )}
+                        {mode === "drawing-line" && (
+                            <div className="drawing-status" role="status" aria-live="polite">
+                                <b>正在绘制开放线</b>
+                                <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 2 ? `至少还需添加 ${2 - drawDistinctCount} 个顶点。` : "按 Enter 或鼠标右键结束。"}</span>
                                 <button className="button" type="button" onClick={closePanel}>取消绘制</button>
                             </div>
                         )}
@@ -475,15 +546,16 @@ function ApprovedManagementApp({ auth }) {
                             )}
                         {(mode === "creating" || mode === "editing") &&
                             bounds && (
+                                <FormErrorBoundary key={`${mode}-${selectedId ?? "new"}`} onClose={closePanel}>
                                 <PlaceForm
-                                    key={`${mode}-${selectedId ?? "new"}`}
                                     feature={
                                         mode === "editing" ? selected : null
                                     }
                                      ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
                                     mapId={mapId}
                                     initialCoordinates={newCoordinates}
-                                    geometry={mode === "editing" ? editGeometry : newGeometry}
+                                     geometry={mode === "editing" ? editGeometry : newGeometry}
+                                     containedPlaces={(mode === "editing" ? selected?.properties.contained_place_ids : containedPlaceIds)?.map((id) => places.features.find((item) => item.id === id && item.geometry.type === "Point")).filter(Boolean) ?? []}
                                     types={types}
                                     bounds={bounds}
                                     disabled={busy}
@@ -495,16 +567,18 @@ function ApprovedManagementApp({ auth }) {
                                             : undefined
                                     }
                                 />
+                                </FormErrorBoundary>
                             )}
                         {mode === "details" && selected && (
                             <PlaceDetails
                                 feature={selected}
                                  ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
                                 mapId={mapId}
-                                type={types.find(
+                                 type={types.find(
                                     (type) =>
                                         type.id === selected.properties.type,
-                                )}
+                                 )}
+                                containedPlaces={(selected.properties.contained_place_ids ?? []).map((id) => places.features.find((item) => item.id === id && item.geometry.type === "Point")).filter(Boolean)}
                                 disabled={busy}
                                 onEdit={editPlace}
                                 onDelete={deletePlace}

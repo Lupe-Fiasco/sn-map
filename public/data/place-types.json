@@ -66,5 +66,10 @@
     { "id": "tourist-attraction", "name": "景点", "color": "#3f7f3f", "icon": "attraction" },
     { "id": "pet-service", "name": "宠物服务", "color": "#b66d45", "icon": "pet-service" },
     { "id": "community-service", "name": "社区服务", "color": "#4f728a", "icon": "community-service" },
+    { "id": "road", "name": "道路", "color": "#315f8c", "icon": "road" },
+    { "id": "alley", "name": "小巷", "color": "#8a6843", "icon": "alley" },
+    { "id": "river", "name": "河流", "color": "#2387a8", "icon": "river" },
+    { "id": "bridge", "name": "桥梁", "color": "#6b5c82", "icon": "bridge" },
+    { "id": "linear-feature", "name": "道路", "color": "#2a7694", "icon": "linear-feature", "hidden": true },
     { "id": "other", "name": "其他", "color": "#65736f", "icon": "other" }
 ]

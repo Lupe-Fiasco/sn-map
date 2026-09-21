@@ -12,6 +12,88 @@ const hardenedImagesMigrationUrl = new URL("../supabase/migrations/202609180007_
 const snapshotLevelsMigrationUrl = new URL("../supabase/migrations/202609200008_enforce_snapshot_levels.sql", import.meta.url);
 const mapsMigrationUrl = new URL("../supabase/migrations/202609210009_add_maps_multiregion.sql", import.meta.url);
 const storageCrudMigrationUrl = new URL("../supabase/migrations/202609220010_harden_storage_map_crud.sql", import.meta.url);
+const lineStringMigrationUrl = new URL("../supabase/migrations/202609230011_add_linestring_places.sql", import.meta.url);
+const lineStringScopeMigrationUrl = new URL("../supabase/migrations/202609240012_protect_linestring_point_scope.sql", import.meta.url);
+const splitLineTypesMigrationUrl = new URL("../supabase/migrations/202609250013_split_linear_place_types.sql", import.meta.url);
+const rejectClosedLineStringsMigrationUrl = new URL("../supabase/migrations/202609260014_reject_closed_linestring_places.sql", import.meta.url);
+const syncLineStringTypesMigrationUrl = new URL("../supabase/migrations/202609270015_sync_linestring_property_types.sql", import.meta.url);
+
+test("LineString geometry gates reject closed lines in corrected 011 and upgrade 014", async () => {
+  const [initialSql, upgradeSql] = await Promise.all([
+    readFile(lineStringMigrationUrl, "utf8"),
+    readFile(rejectClosedLineStringsMigrationUrl, "utf8"),
+  ]);
+  // ai coding：只检查 LineString 分支，避免误把 Polygon 的闭合要求当作开放线保护。
+  for (const sql of [initialSql, upgradeSql]) {
+    const lineBranch = sql.slice(sql.indexOf("elsif p_geometry->>'type' = 'LineString'"), sql.indexOf("elsif p_geometry->>'type' = 'Polygon'"));
+    assert.match(lineBranch, /jsonb_array_length\(coordinates\) < 2/);
+    assert.match(lineBranch, /first_position := coordinates->0; last_position := coordinates->\(jsonb_array_length\(coordinates\)-1\);/);
+    assert.match(lineBranch, /if first_position = last_position then return false; end if;/);
+    assert.match(lineBranch, /distinct_count < 2/);
+    assert.match(lineBranch, /between -180 and 180/);
+    assert.match(lineBranch, /between -90 and 90/);
+  }
+  assert.match(upgradeSql, /create or replace function public\.is_valid_place_geometry/);
+  assert.match(upgradeSql, /places_geometry_valid_check check \(public\.is_valid_place_geometry\(geometry\)\)/);
+  assert.match(upgradeSql, /map_snapshots_geometry_valid_check check \(public\.is_valid_snapshot_geometries\(snapshot\)\)/);
+  assert.match(upgradeSql, /validate constraint places_geometry_valid_check/);
+  assert.match(upgradeSql, /validate constraint map_snapshots_geometry_valid_check/);
+  const preflightEnd = upgradeSql.indexOf("create or replace function public.is_valid_place_geometry");
+  const preflight = upgradeSql.slice(0, preflightEnd);
+  assert.match(preflight, /from public\.places/);
+  assert.match(preflight, /from public\.map_snapshots/);
+  assert.match(preflight, /closed_place_count > 0 or closed_snapshot_feature_count > 0/);
+  assert.match(preflight, /places\(owner_id,map_id,id,geometry\)/);
+  assert.match(preflight, /不得猜测形状或删除快照/);
+  assert.ok(preflightEnd > 0);
+  assert.doesNotMatch(preflight, /create or replace function|alter table .*constraint/i);
+  assert.match(upgradeSql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("line type migrations keep the LineString column and properties type synchronized without touching other geometry or snapshots", async () => {
+  const [sql, repairSql] = await Promise.all([
+    readFile(splitLineTypesMigrationUrl, "utf8"),
+    readFile(syncLineStringTypesMigrationUrl, "utf8"),
+  ]);
+  // ai coding：013 的静态守卫确保双层 type 同步、几何收窄且不改写历史公开快照。
+  assert.match(sql, /set type = 'road'/);
+  assert.match(sql, /jsonb_set\(properties, '\{type\}', '"road"'::jsonb, true\)/);
+  assert.match(sql, /geometry->>'type' = 'LineString'/);
+  assert.match(sql, /type = 'linear-feature'/);
+  assert.doesNotMatch(sql, /update public\.map_snapshots|delete from/i);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+  assert.match(repairSql, /set properties = jsonb_set\(properties, '\{type\}', to_jsonb\(type\), true\)/);
+  assert.match(repairSql, /geometry->>'type' = 'LineString'/);
+  assert.match(repairSql, /properties->>'type' is distinct from type/);
+  assert.doesNotMatch(repairSql, /Point|Polygon|update public\.map_snapshots|delete from/i);
+  assert.match(repairSql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("LineString scope migration blocks referenced Point owner/map moves without blocking unreferenced Points", async () => {
+  const sql = await readFile(lineStringScopeMigrationUrl, "utf8");
+  // ai coding：012 必须按旧 owner/map 查引用，仅在引用存在时拒绝迁移，并与并发引用写入共用事务锁。
+  assert.match(sql, /old\.geometry->>'type' = 'Point'/);
+  assert.match(sql, /p\.owner_id = old\.owner_id and p\.map_id = old\.map_id[\s\S]*p\.properties->'contained_place_ids' \? old\.id/);
+  assert.match(sql, /if new\.owner_id is distinct from old\.owner_id or new\.map_id is distinct from old\.map_id then[\s\S]*cannot change owner_id or map_id/);
+  assert.match(sql, /pg_advisory_xact_lock[\s\S]*new\.owner_id::text[\s\S]*new\.map_id[\s\S]*contained_id/);
+  assert.match(sql, /security definer set search_path = ''/);
+  assert.match(sql, /revoke all on function public\.validate_linestring_contained_places\(\) from public, anon, authenticated/);
+  assert.doesNotMatch(sql, /create policy|drop policy|service_role/i);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
+
+test("LineString migration validates geometry, scoped Point relations and keeps secure snapshot gates", async () => {
+  const sql = await readFile(lineStringMigrationUrl, "utf8");
+  // ai coding：011 的静态守卫禁止通过替换 RLS/Storage policy 获得线支持。
+  assert.match(sql, /LineString/); assert.match(sql, /jsonb_array_length\(coordinates\) < 2/);
+  assert.match(sql, /distinct_count < 2/); assert.match(sql, /between -180 and 180/); assert.match(sql, /between -90 and 90/);
+  assert.match(sql, /p\.owner_id=new\.owner_id and p\.map_id=new\.map_id[\s\S]*p\.geometry->>'type'='Point'/);
+  assert.match(sql, /map_snapshots_geometry_valid_check/); assert.match(sql, /snapshot_allowed_public_fields/);
+  assert.match(sql, /source_image\.owner_id=m\.owner_id and source_image\.map_id=m\.map_id/);
+  assert.match(sql, /where public\.is_valid_place_geometry\(feature->'geometry'\)/);
+  assert.doesNotMatch(sql, /create policy|drop policy|service_role/i);
+  assert.match(sql, /^begin;[\s\S]*commit;\s*$/m);
+});
 
 test("storage CRUD migration binds every object operation to map and place metadata", async () => {
   const sql = await readFile(storageCrudMigrationUrl, "utf8");
