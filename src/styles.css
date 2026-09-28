@@ -32,10 +32,8 @@ body {
     min-height: 100dvh;
     background: #f6f7f2;
 }
-.site-header,
-.site-header-inner,
-main,
-footer {
+
+main {
     width: min(1440px, calc(100% - 48px));
     margin-inline: auto;
 }
@@ -74,7 +72,7 @@ footer {
     align-items: center;
     justify-content: space-between;
     gap: 24px;
-    padding: 14px 0;
+    padding: 14px 30px;
 }
 .header-brand {
     display: flex;
@@ -306,7 +304,7 @@ main {
     gap: 18px;
 }
 .management-workspace {
-    margin-top: 132px;
+    margin-top: 76px;
 }
 /* ai coding：地图与公开快照组成可收缩的主内容列，窄桌面下不撑开页面网格。 */
 .map-column {
@@ -735,10 +733,7 @@ html[data-visual-mode="minimal"] .map-selection-card {
 .leaflet-container.editing-area {
     cursor: default;
 }
-/* ai coding：偏移由 App 实测完整地图头部（含动态错误提示），使侧栏始终对齐实际 #map 顶边。 */
-.management-workspace > .info-panel {
-    padding-top: var(--map-content-offset, 0px);
-}
+
 .info-panel {
     display: flex;
     min-width: 0;
