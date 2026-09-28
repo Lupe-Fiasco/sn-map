@@ -33,7 +33,7 @@ body {
     background: #f6f7f2;
 }
 
-main {
+main, .footer {
     width: min(1440px, calc(100% - 48px));
     margin-inline: auto;
 }
