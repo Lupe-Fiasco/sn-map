@@ -68,7 +68,7 @@ main {
 }
 .site-header-inner {
     display: flex;
-    min-height: 108px;
+    min-height: 68px;
     align-items: center;
     justify-content: space-between;
     gap: 24px;
