@@ -1,15 +1,15 @@
 {
   "crs": "WGS84 (EPSG:4326)",
-  "south": 33.665,
-  "west": 117.45,
-  "north": 34.22,
-  "east": 118.24,
+  "south": 33.86,
+  "west": 117.88,
+  "north": 33.96,
+  "east": 118.01,
   "center": {
-    "lat": 33.9425,
-    "lon": 117.845
+    "lat": 33.91,
+    "lon": 117.945
   },
-  "description": "覆盖睢宁县行政边界并在四周保留约 5 公里余量的外接矩形；不是严格行政边界。",
-  "source": "OpenStreetMap 睢宁县行政边界关系的 bbox",
+  "description": "睢宁主城区视图范围，依据现有用户地点分布及中央大街、元府路等现有 OSM 道路确定；行政区原始数据范围保留在 sourceBbox。",
+  "source": "睢宁主城区视图范围；基础道路由行政区道路数据离线裁剪",
   "sourceUrl": "https://www.openstreetmap.org/relation/3218568",
   "osmRelationId": 3218568,
   "sourceBbox": {

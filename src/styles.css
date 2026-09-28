@@ -150,6 +150,46 @@ main {
     align-items: center;
     gap: 8px;
 }
+.map-heading-tools {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+}
+.view-switch {
+    display: inline-flex;
+    flex: 0 0 auto;
+    padding: 3px;
+    border: 1px solid #c8d3cc;
+    border-radius: 8px;
+    background: #f3f6f3;
+}
+.view-switch button {
+    min-height: 30px;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 5px;
+    color: #60716d;
+    background: transparent;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.view-switch button.active {
+    color: #fff;
+    background: #24483f;
+    box-shadow: 0 1px 4px rgba(25, 51, 46, 0.2);
+}
+.view-switch button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+.view-switch button:focus-visible {
+    outline: 3px solid rgba(22, 120, 95, 0.22);
+    outline-offset: 1px;
+}
 .button {
     min-height: 36px;
     padding: 7px 12px;
@@ -193,6 +233,140 @@ textarea:focus-visible,
 #map {
     height: clamp(600px, 74vh, 820px);
     background: #e5e9e2;
+}
+.city3d-view,
+.city3d-message {
+    height: clamp(600px, 74vh, 820px);
+}
+.city3d-view {
+    position: relative;
+    overflow: hidden;
+    background: #dce8e1;
+}
+.city3d-view canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    outline: none;
+}
+.city3d-message {
+    display: grid;
+    place-content: center;
+    justify-items: center;
+    gap: 9px;
+    padding: 30px;
+    color: #60716d;
+    background: #e5e9e2;
+    text-align: center;
+    font-size: 0.84rem;
+}
+.city3d-message.error {
+    color: #812e28;
+    background: #fff7f5;
+}
+.city3d-message .button {
+    margin-top: 5px;
+}
+.city3d-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+.city3d-guide,
+.city3d-legend {
+    position: absolute;
+    z-index: 2;
+    color: #ecf5f0;
+    background: rgba(25, 51, 46, 0.84);
+    box-shadow: 0 4px 14px rgba(20, 38, 33, 0.18);
+    backdrop-filter: blur(5px);
+    pointer-events: none;
+}
+.city3d-guide {
+    top: 14px;
+    left: 14px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 650;
+}
+.city3d-legend {
+    right: 14px;
+    bottom: 14px;
+    display: grid;
+    min-width: 164px;
+    gap: 7px;
+    padding: 11px 12px;
+    border-radius: 8px;
+    font-size: 0.7rem;
+}
+.city3d-legend strong {
+    font-size: 0.76rem;
+}
+.city3d-legend span {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+.city3d-legend i {
+    display: inline-block;
+    width: 18px;
+    height: 5px;
+    border-radius: 2px;
+}
+.city3d-legend .legend-road {
+    background: #858d91;
+}
+.city3d-legend .legend-building {
+    height: 10px;
+    background: #b27a62;
+}
+.city3d-legend .legend-water {
+    background: #3189bd;
+}
+.city3d-legend .legend-city-building {
+    height: 9px;
+    background: #b9aa91;
+}
+
+/* ai coding：3D tooltip 完全穿透鼠标，紧凑双层信息在地图明暗背景上均可读。 */
+.city3d-tooltip {
+  min-width: max-content;
+  max-width: 260px;
+  padding: 7px 10px 8px;
+  border: 1px solid rgb(255 255 255 / 35%);
+  border-radius: 8px;
+  background: rgb(27 40 35 / 92%);
+  box-shadow: 0 6px 20px rgb(12 24 19 / 28%);
+  color: #fff;
+  line-height: 1.25;
+  pointer-events: none;
+  transform: translateY(-8px);
+}
+
+.city3d-tooltip span,
+.city3d-tooltip strong {
+  display: block;
+}
+
+.city3d-tooltip span {
+  margin-bottom: 3px;
+  color: #cde2d7;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+.city3d-tooltip strong {
+  max-width: 240px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  font-weight: 700;
+}
+.city3d-legend small {
+    max-width: 190px;
+    color: #d4e2dc;
+    line-height: 1.4;
 }
 .map-loading {
     display: grid;
@@ -1435,6 +1609,13 @@ footer {
     .header-tools {
         align-items: stretch;
     }
+    .panel-heading,
+    .map-heading-tools {
+        align-items: flex-start;
+    }
+    .map-heading-tools {
+        flex-wrap: wrap;
+    }
 }
 @media (max-width: 900px) {
     body {
@@ -1457,6 +1638,11 @@ footer {
         padding-top: 0;
     }
     #map {
+        height: min(68vh, 620px);
+        min-height: 430px;
+    }
+    .city3d-view,
+    .city3d-message {
         height: min(68vh, 620px);
         min-height: 430px;
     }

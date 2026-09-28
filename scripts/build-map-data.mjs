@@ -2,6 +2,7 @@
 import { copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { SUINING_MAIN_CITY_BOUNDS, clipLineToBounds, clipRoadCollection } from "../src/services/geoBounds.js";
 
 const OVERPASS_URL = process.env.OVERPASS_URL || "https://overpass-api.de/api/interpreter";
 const MARGIN_METRES = 5000;
@@ -38,36 +39,9 @@ function paddedBounds(source) {
   return { south, west, north, east, center: { lat: Number(((south + north) / 2).toFixed(6)), lon: Number(((west + east) / 2).toFixed(6)) } };
 }
 
-function clipSegment(a, b, bounds) {
-  const [x1, y1] = a; const [x2, y2] = b; const dx = x2 - x1; const dy = y2 - y1;
-  const p = [-dx, dx, -dy, dy]; const q = [x1 - bounds.west, bounds.east - x1, y1 - bounds.south, bounds.north - y1];
-  let low = 0; let high = 1;
-  for (let index = 0; index < p.length; index += 1) {
-    if (p[index] === 0) { if (q[index] < 0) return null; continue; }
-    const ratio = q[index] / p[index];
-    if (p[index] < 0) low = Math.max(low, ratio); else high = Math.min(high, ratio);
-    if (low > high) return null;
-  }
-  const round = (value) => Number(value.toFixed(7));
-  return [[round(x1 + low * dx), round(y1 + low * dy)], [round(x1 + high * dx), round(y1 + high * dy)]];
-}
-
-function clipLine(points, bounds) {
-  const parts = []; let current = [];
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const clipped = clipSegment(points[index], points[index + 1], bounds);
-    if (!clipped) { if (current.length >= 2) parts.push(current); current = []; continue; }
-    const [start, end] = clipped;
-    if (current.length && current.at(-1)[0] === start[0] && current.at(-1)[1] === start[1]) current.push(end);
-    else { if (current.length >= 2) parts.push(current); current = [start, end]; }
-  }
-  if (current.length >= 2) parts.push(current);
-  return parts;
-}
-
 function roadsGeoJson(payload, bounds, retrievedAt, slug) {
   const features = (payload.elements ?? []).flatMap((way) => {
-    const parts = clipLine((way.geometry ?? []).map(({ lon, lat }) => [lon, lat]), bounds);
+    const parts = clipLineToBounds((way.geometry ?? []).map(({ lon, lat }) => [lon, lat]), bounds);
     if (!parts.length) return [];
     const properties = { osm_id: way.id };
     for (const key of ["name", "highway", "ref"]) if (key in (way.tags ?? {})) properties[key] = way.tags[key];
@@ -106,8 +80,15 @@ async function buildRegion(slug, root) {
   const directory = path.join(root, slug);
   let existing = {};
   try { existing = JSON.parse(await readFile(path.join(directory, "map-config.json"), "utf8")); } catch { /* first build */ }
-  const config = { ...existing, id: slug, slug, name: region.name, bounds: { south: rectangle.south, west: rectangle.west, north: rectangle.north, east: rectangle.east }, center: rectangle.center, base_roads_path: `/data/regions/${slug}/base-roads.geojson`, seed_places_path: `/data/regions/${slug}/places.geojson`, is_active: true, source: `OpenStreetMap ${region.name}行政边界关系的 bbox`, source_url: `https://www.openstreetmap.org/relation/${relation.id}`, osm_relation_id: relation.id, source_bbox: relation.bounds, margin_approx_metres: MARGIN_METRES, retrieved_at: retrievedAt };
-  await atomicWrite(directory, [["map-config.json", `${JSON.stringify(config, null, 2)}\n`], ["base-roads.geojson", `${JSON.stringify(roads)}\n`]]);
+  const mainCityBounds = slug === "suining" ? SUINING_MAIN_CITY_BOUNDS : null;
+  const viewBounds = mainCityBounds ?? rectangle;
+  const viewRoads = mainCityBounds ? clipRoadCollection(roads, viewBounds, `${slug}-base-roads-main-city`) : roads;
+  const center = { lat: (viewBounds.south + viewBounds.north) / 2, lon: (viewBounds.west + viewBounds.east) / 2 };
+  // ai coding：仅睢宁构建并固定主城区视图及裁剪道路；行政区原始道路继续保留，避免下次 Overpass 构建覆盖视图范围。
+  const config = { ...existing, id: slug, slug, name: region.name, bounds: viewBounds, ...(mainCityBounds ? { main_city_bounds: viewBounds, administrative_bounds: rectangle } : {}), center, base_roads_path: `/data/regions/${slug}/${mainCityBounds ? "base-roads-main-city.geojson" : "base-roads.geojson"}`, seed_places_path: `/data/regions/${slug}/places.geojson`, is_active: true, source: mainCityBounds ? `睢宁主城区视图范围；道路裁剪自 OpenStreetMap ${region.name}行政边界数据` : `OpenStreetMap ${region.name}行政边界关系的 bbox`, source_url: `https://www.openstreetmap.org/relation/${relation.id}`, osm_relation_id: relation.id, source_bbox: relation.bounds, margin_approx_metres: MARGIN_METRES, retrieved_at: retrievedAt };
+  const outputs = [["map-config.json", `${JSON.stringify(config, null, 2)}\n`], ["base-roads.geojson", `${JSON.stringify(roads)}\n`]];
+  if (mainCityBounds) outputs.push(["base-roads-main-city.geojson", `${JSON.stringify(viewRoads)}\n`]);
+  await atomicWrite(directory, outputs);
   console.log(`${region.name}: relation ${relation.id}, ${roads.features.length} roads`);
 }
 

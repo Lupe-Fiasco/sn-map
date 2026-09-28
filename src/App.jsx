@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import PlaceList from "./components/PlaceList.jsx";
 import PlaceForm from "./components/PlaceForm.jsx";
@@ -10,11 +10,16 @@ import SharePage from "./components/SharePage.jsx";
 import ApprovalGate from "./components/ApprovalGate.jsx";
 import AdminPanel from "./components/AdminPanel.jsx";
 import FormErrorBoundary from "./components/FormErrorBoundary.jsx";
+import City3DErrorBoundary from "./components/City3DErrorBoundary.jsx";
 import { usePlaces } from "./hooks/usePlaces.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { resolveAppRoute } from "./services/approval.js";
-import { loadMapConfigs } from "./services/maps.js";
+import { loadMapConfigs, resolveMapViewConfig } from "./services/maps.js";
 import { finishAreaDrawing, finishLineDrawing } from "./services/lineDrawing.js";
+import {
+    getCity3DImportAttempt,
+    hasNextCity3DImportAttempt,
+} from "./services/city3DLoader.js";
 import {
     forgetSessionFileHandle,
     getSessionFileHandle,
@@ -59,8 +64,17 @@ function ApprovedManagementApp({ auth }) {
         isOwnerOperationCurrent,
         markSynced,
     } = usePlaces(auth.session, !auth.status.loading, mapConfig);
-    const bounds = mapConfig?.bounds ?? null;
+    const viewConfig = resolveMapViewConfig(mapConfig);
+    const bounds = viewConfig?.bounds ?? null;
     const [mode, setMode] = useState("browse");
+    const [viewMode, setViewMode] = useState("2d");
+    const [city3DImportIndex, setCity3DImportIndex] = useState(0);
+    const city3DImportAttempt = getCity3DImportAttempt(city3DImportIndex);
+    // ai coding：重试索引改变时同时更换 lazy 类型和静态 query importer，确保发起全新的模块请求。
+    const LazyCity3DView = useMemo(
+        () => lazy(city3DImportAttempt.load),
+        [city3DImportAttempt],
+    );
     const [selectedId, setSelectedId] = useState(null);
     const [newCoordinates, setNewCoordinates] = useState(null);
     const [drawCoordinates, setDrawCoordinates] = useState([]);
@@ -219,6 +233,7 @@ function ApprovedManagementApp({ auth }) {
         if (busy) return notify("数据保存进行中，请稍候");
         if (mode === "adding") closePanel();
         else {
+            setViewMode("2d");
             setMode("adding");
             setSelectedId(null);
             setNewCoordinates(null);
@@ -232,6 +247,7 @@ function ApprovedManagementApp({ auth }) {
         if (busy) return notify("数据保存进行中，请稍候");
         if (mode === "drawing-area") closePanel();
         else {
+            setViewMode("2d");
             setMode("drawing-area"); setSelectedId(null); setNewCoordinates(null);
             setNewGeometry(null); setEditGeometry(null); setDrawCoordinates([]);
             notify("请连续点击区域顶点；点击首点或按 Enter 闭合，Escape 取消");
@@ -241,6 +257,7 @@ function ApprovedManagementApp({ auth }) {
         if (busy) return notify("数据保存进行中，请稍候");
         if (mode === "drawing-line") closePanel();
         else {
+            setViewMode("2d");
             setMode("drawing-line"); setSelectedId(null); setNewCoordinates(null);
             setNewGeometry(null); setEditGeometry(null); setDrawCoordinates([]); setContainedPlaceIds([]);
             notify("请连续点击线顶点；至少 2 个不同顶点后按 Enter 或鼠标右键结束，Escape 取消");
@@ -266,6 +283,7 @@ function ApprovedManagementApp({ auth }) {
     };
     const editPlace = () => {
         // ai coding：Polygon/LineString 编辑从正式 geometry 建立隔离草稿；Point 继续沿用坐标表单。
+        setViewMode("2d");
         setEditGeometry(selected?.geometry.type !== "Point" ? structuredClone(selected.geometry) : null);
         setContainedPlaceIds(selected?.geometry.type === "LineString" ? [...(selected.properties.contained_place_ids ?? [])] : []);
         setMode("editing");
@@ -412,7 +430,13 @@ function ApprovedManagementApp({ auth }) {
                 <section ref={mapPanelRef} className="map-panel" aria-labelledby="map-title">
                     <div ref={mapHeaderRef} className="map-header">
                     <div className="panel-heading">
-                        <h2 id="map-title">地图视图</h2>
+                        <h2 id="map-title">{viewMode === "2d" ? "地图视图" : "3D 城市视图"}</h2>
+                        <div className="map-heading-tools">
+                        {/* ai coding：主内容区原位切换渲染器，Leaflet 与 Three.js 不形成嵌套层叠上下文。 */}
+                        <div className="view-switch" role="group" aria-label="地图视图模式">
+                            <button type="button" className={viewMode === "2d" ? "active" : ""} aria-pressed={viewMode === "2d"} onClick={() => setViewMode("2d")}>2D 地图</button>
+                            <button type="button" className={viewMode === "3d" ? "active" : ""} aria-pressed={viewMode === "3d"} onClick={() => setViewMode("3d")} disabled={!bounds || !["browse", "details"].includes(mode)} title={!["browse", "details"].includes(mode) ? "请先完成或取消当前地图操作" : undefined}>3D 城市</button>
+                        </div>
                         <div className="map-actions">
                             <button
                                 className={`button ${mode === "adding" ? "" : "primary"}`}
@@ -446,6 +470,7 @@ function ApprovedManagementApp({ auth }) {
                                 {mode === "drawing-area" ? "退出区域绘制" : "▱ 新增区域"}
                             </button>
                         </div>
+                        </div>
                     </div>
                     {mapErrors.roads && (
                         <p className="map-error" role="alert">{mapErrors.roads}</p>
@@ -455,13 +480,13 @@ function ApprovedManagementApp({ auth }) {
                         <div id="map" className="map-loading" role="alert">
                             {mapConfigError || mapErrors.bounds}
                         </div>
-                    ) : bounds ? (
-                         <MapView
+                    ) : bounds && viewMode === "2d" ? (
+                        <MapView
                             key={mapId}
                             mapId={mapId}
                              bounds={bounds}
                             mapName={mapConfig.name}
-                            baseRoadsPath={mapConfig.base_roads_path}
+                            baseRoadsPath={viewConfig.baseRoadsPath}
                             places={places}
                             types={types}
                             selectedId={selectedId}
@@ -481,6 +506,25 @@ function ApprovedManagementApp({ auth }) {
                             editGeometry={editGeometry}
                             onEditGeometryChange={setEditGeometry}
                         />
+                    ) : bounds ? (
+                        // ai coding：边界包住 Suspense 与 lazy 组件，既保留加载反馈，也隔离导入及 3D 渲染异常。
+                        <City3DErrorBoundary
+                            onReturnTo2D={() => setViewMode("2d")}
+                            canRetry={hasNextCity3DImportAttempt(city3DImportIndex)}
+                            onRetry={() => setCity3DImportIndex((index) => index + 1)}
+                        >
+                            <Suspense fallback={<div className="city3d-message" role="status">正在加载 3D 渲染器…</div>}>
+                                <LazyCity3DView
+                                    key={`city-${mapId}`}
+                                    mapId={mapId}
+                                    mapName={mapConfig.name}
+                                    bounds={bounds}
+                                    baseRoadsPath={viewConfig.baseRoadsPath}
+                                    places={places}
+                                    onRoadStatus={roadStatus}
+                                />
+                            </Suspense>
+                        </City3DErrorBoundary>
                     ) : (
                         <div id="map" className="map-loading" role="status">
                             正在加载地图范围…

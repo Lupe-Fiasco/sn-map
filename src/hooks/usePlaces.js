@@ -4,6 +4,7 @@ import { hasSeededCloud, markCloudSeeded, migrateLegacyPlacesStorage, readDraft,
 import { supabase, supabaseConfiguration } from "../services/supabaseClient.js";
 import { deleteCloudPlace, fetchCloudPlaces, rowsToCollection, saveCloudPlaceToCollection, seedCloudPlaces } from "../services/supabasePlaces.js";
 import { captureOwnerGeneration, createOwnerGeneration, invalidateOwnerGeneration, isOwnerGenerationCurrent, staleOwnerOperationError, updateOwnerGeneration } from "../services/ownerGeneration.js";
+import { placesForScope } from "../services/mapPlaceIsolation.js";
 
 const getJson = async (url) => {
   const response = await fetch(url);
@@ -15,7 +16,7 @@ const cloudStatus = (state, message, saving = false, ownerId = null) => ({ state
 const ownerIdForScope = (scope) => String(scope).split(":")[0];
 
 export function usePlaces(session, authReady = true, mapConfig = null) {
-  const [places, setPlaces] = useState(emptyCollection);
+  const [placeState, setPlaceState] = useState(() => ({ scope: null, collection: emptyCollection() }));
   const [baseline, setBaseline] = useState(emptyCollection);
   const [types, setTypes] = useState([]);
   const [status, setStatus] = useState({ loading: true, error: "", message: "正在加载…" });
@@ -23,6 +24,10 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
   const cloudSessionRef = useRef(null);
   const mapId = mapConfig?.id || "loading-map";
   const renderOwnerId = `${session?.user?.id || "offline"}:${mapId}`;
+  const places = placesForScope(placeState, renderOwnerId);
+  const setPlaces = useCallback((collection) => {
+    setPlaceState({ scope: renderOwnerId, collection });
+  }, [renderOwnerId]);
   const ownerGenerationRef = useRef(createOwnerGeneration(renderOwnerId));
   const authReadyRef = useRef(authReady);
   const loadedGenerationRef = useRef(null);
@@ -137,7 +142,7 @@ export function usePlaces(session, authReady = true, mapConfig = null) {
     };
     load();
     return () => { active = false; };
-  }, [session?.user?.id, authReady, mapConfig, mapId, renderOwnerId]);
+  }, [session?.user?.id, authReady, mapConfig, mapId, renderOwnerId, setPlaces]);
 
   const storeDraft = useCallback((next, ownerId) => {
     try {

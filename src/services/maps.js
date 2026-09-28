@@ -27,6 +27,12 @@ export async function loadMapConfigs(fetchJson = async (url) => {
   return maps.filter(({ is_active: active }) => active !== false);
 }
 
+// ai coding：2D 与 3D 必须从同一个已校验配置解析视图范围和基础道路，禁止各自回退到行政区范围。
+export function resolveMapViewConfig(mapConfig) {
+  if (!mapConfig) return null;
+  return Object.freeze({ bounds: mapConfig.bounds, baseRoadsPath: mapConfig.base_roads_path });
+}
+
 export function mapScope(ownerId, mapId) {
   if (!ownerId || !mapId) throw new Error("数据缺少 owner 或 map 标识");
   return `${ownerId}:${mapId}`;
