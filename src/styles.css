@@ -32,13 +32,20 @@ body {
     min-height: 100dvh;
     background: #f6f7f2;
 }
+/* ai coding：公开路由的状态与地图共用同一 scoped 画布，不依赖 body 内容高度或根节点结构选择器。 */
+.public-share-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #f6f7f2;
+}
 
-main, .footer {
+main, footer {
     width: min(1440px, calc(100% - 48px));
     margin-inline: auto;
 }
 /* ai coding：公开快照单独恢复内容宽度，不复用或覆盖管理端 Header 的独立布局参数。 */
 .public-header,
+.public-share-page > footer,
 :where(#root:has(> .public-header) > footer) {
     width: calc(100% - 48px);
     max-width: 1440px;
@@ -571,7 +578,7 @@ html[data-visual-mode="cyberpunk"] body {
     color: var(--cyber-text);
     background: #070b18;
 }
-html[data-visual-mode="cyberpunk"] .approval-page {
+html[data-visual-mode="cyberpunk"] :is(.approval-page, .public-share-page) {
     background: #070b18;
 }
 html[data-visual-mode="cyberpunk"] .management-header {
@@ -609,7 +616,7 @@ html[data-visual-mode="cyberpunk"] footer {
 html[data-visual-mode="minimal"] body {
     background: #fafafa;
 }
-html[data-visual-mode="minimal"] .approval-page {
+html[data-visual-mode="minimal"] :is(.approval-page, .public-share-page) {
     background: #fafafa;
 }
 html[data-visual-mode="minimal"] .map-panel,
@@ -1707,6 +1714,21 @@ footer {
 .public-header .button {
     text-decoration: none;
 }
+/* ai coding：公开页切换器独立于管理操作栏，明确提示 3D 仍是只读且受地区边界约束。 */
+.public-view-toolbar {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 8px 14px;
+    border-bottom: 1px solid #dbe3dd;
+    background: #f8faf8;
+}
+.public-view-toolbar > span {
+    color: #60716d;
+    font-size: .75rem;
+}
 .public-place-list {
     max-height: 620px;
 }
@@ -1949,6 +1971,16 @@ html[data-visual-mode="cyberpunk"] .view-switch button {
 html[data-visual-mode="cyberpunk"] .view-switch button.active {
     color: #07101d;
     background: var(--cyber-cyan);
+}
+/* ai coding：公开页工具栏在赛博模式下使用独立深色表面，普通与极简主题继续沿用浅色默认值。 */
+html[data-visual-mode="cyberpunk"] .public-view-toolbar {
+    border-color: rgba(104, 237, 255, 0.38);
+    color: var(--cyber-text);
+    background: linear-gradient(90deg, rgba(10, 20, 42, 0.98), rgba(21, 20, 49, 0.98));
+    box-shadow: inset 0 -1px 0 rgba(189, 147, 255, 0.3), 0 5px 18px rgba(0, 234, 255, 0.1);
+}
+html[data-visual-mode="cyberpunk"] .public-view-toolbar > span {
+    color: var(--cyber-muted);
 }
 html[data-visual-mode="cyberpunk"] :is(.drawing-status, .contained-places, .cloud-status, .public-details) {
     border-color: rgba(104, 237, 255, 0.28);

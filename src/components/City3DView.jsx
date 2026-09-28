@@ -329,7 +329,7 @@ function CityScene({ projection, roadPaths, buildings, userPlaces, hover, setHov
   );
 }
 
-export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, places, onRoadStatus, onSelect, visualMode = "normal" }) {
+export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, places, onRoadStatus, onSelect, onFallbackTo2D, readOnly = false, visualMode = "normal" }) {
   const [loadState, setLoadState] = useState({ loading: true, error: "", data: null });
   const [retry, setRetry] = useState(0);
   const projection = useMemo(() => createLocalProjection(bounds), [bounds]);
@@ -374,13 +374,17 @@ export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, plac
     <div className="city3d-message error" role="alert">
       <strong>3D 城市数据加载失败</strong>
       <span>{loadState.error}</span>
-      <button className="button" type="button" onClick={() => setRetry((value) => value + 1)}>重新加载</button>
+      {/* ai coding：公开页可安全降级到仍在内存中的只读 2D 快照；管理端缺省时保持原重试入口。 */}
+      {onFallbackTo2D ? <div className="city3d-actions">
+        <button className="button primary" type="button" onClick={onFallbackTo2D}>返回 2D 地图</button>
+        <button className="button" type="button" onClick={() => setRetry((value) => value + 1)}>重新加载</button>
+      </div> : <button className="button" type="button" onClick={() => setRetry((value) => value + 1)}>重新加载</button>}
     </div>
   );
 
   const extent = Math.max(projection.width, projection.height);
   return (
-    <div ref={containerRef} id="city-3d" className={`city3d-view city3d-${capabilities.mode}`} role="region" aria-label={`${mapName} 3D 城市浏览视图`}>
+    <div ref={containerRef} id="city-3d" className={`city3d-view city3d-${capabilities.mode}`} role="region" aria-label={`${mapName}${readOnly ? "公开快照只读" : ""} 3D 城市浏览视图`}>
       <Canvas
         shadows
         dpr={[1, 1.5]}
