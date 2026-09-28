@@ -305,6 +305,7 @@ main {
 }
 .management-workspace {
     margin-top: 76px;
+    padding-top: 20px;
 }
 /* ai coding：地图与公开快照组成可收缩的主内容列，窄桌面下不撑开页面网格。 */
 .map-column {
