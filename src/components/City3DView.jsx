@@ -1,13 +1,22 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Canvas } from "@react-three/fiber";
-import { Html, MapControls } from "@react-three/drei";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { Edges, MapControls } from "@react-three/drei";
 import * as THREE from "three";
 import { createLocalProjection, createProceduralBuildings, createRibbonGeometryData, projectRoadPaths, projectUserPlaces } from "../services/cityProjection.js";
 import { CITY_3D_STYLE, classifyLinearPlace, classifyPlaceBuilding, getCity3DCameraConfig } from "../services/city3DStyle.js";
 import { createPlaceHoverStrategy, createPointPlaceBuildings, createPolygonPlaceBuildings } from "../services/city3DPlaces.js";
+import { applyCity3DPanBounds, clearTooltipForKey, getCity3DPanBounds, isUserPlaceHovered, retainInitialTooltipPosition } from "../services/city3DInteraction.js";
+import { getVisualModeCapabilities, updateProceduralBuildingMaterial } from "../services/visualMode.js";
 
-function createRoadGeometry(paths, kind, width = CITY_3D_STYLE.baseRoads[kind].width, elevation = 0.055) {
-  const { positions, hits } = createRibbonGeometryData(paths, kind, width, elevation);
+function createRoadGeometry(paths, kind, width, elevation, thickness) {
+  const style = CITY_3D_STYLE.baseRoads[kind];
+  const { positions, hits } = createRibbonGeometryData(
+    paths,
+    kind,
+    width ?? style.width,
+    elevation ?? style.elevation,
+    thickness ?? style.thickness,
+  );
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   geometry.computeVertexNormals();
@@ -15,25 +24,30 @@ function createRoadGeometry(paths, kind, width = CITY_3D_STYLE.baseRoads[kind].w
   return { geometry, hits };
 }
 
-function hoverHandlers(item, setHover, position) {
+function pointerPosition(event, containerRef) {
+  const source = event.nativeEvent ?? event;
+  const rect = containerRef.current?.getBoundingClientRect();
+  return { x: source.clientX - (rect?.left ?? 0), y: source.clientY - (rect?.top ?? 0) };
+}
+
+function hoverHandlers(item, setHover, containerRef, onSelect) {
   return {
     onPointerOver(event) {
       event.stopPropagation();
-      setHover({ ...item, position });
+      setHover((current) => retainInitialTooltipPosition(current, item, pointerPosition(event, containerRef)));
     },
     onPointerOut(event) {
       event.stopPropagation();
-      setHover((current) => current?.key === item.key ? null : current);
+      setHover((current) => clearTooltipForKey(current, item.key));
+    },
+    onClick(event) {
+      event.stopPropagation();
+      onSelect?.(item.id, true);
     },
   };
 }
 
-function pathAnchor(points, height = 0.8) {
-  const point = points[Math.floor(points.length / 2)] ?? [0, 0];
-  return [point[0], height, point[1]];
-}
-
-function RoadMeshes({ paths, setHover }) {
+function RoadMeshes({ paths, setHover, containerRef }) {
   const hoveredKeys = useRef({});
   const geometries = useMemo(() => Object.fromEntries(
     Object.keys(CITY_3D_STYLE.baseRoads).map((kind) => [kind, createRoadGeometry(paths, kind)]),
@@ -44,19 +58,28 @@ function RoadMeshes({ paths, setHover }) {
       key={kind}
       geometry={geometry}
       receiveShadow
+      onPointerOver={(event) => {
+        event.stopPropagation();
+        const path = hits[event.faceIndex];
+        if (path) {
+          const next = { key: `road:${path.id}`, type: "只读基础道路", name: path.name };
+          hoveredKeys.current[kind] = next.key;
+          setHover((current) => retainInitialTooltipPosition(current, next, pointerPosition(event, containerRef)));
+        }
+      }}
       onPointerMove={(event) => {
         event.stopPropagation();
         const path = hits[event.faceIndex];
         if (path) {
-          const next = { key: `road:${path.id}`, type: "只读基础道路", name: path.name, position: pathAnchor(path.points) };
+          const next = { key: `road:${path.id}`, type: "只读基础道路", name: path.name };
           hoveredKeys.current[kind] = next.key;
-          setHover((current) => current?.key === next.key ? current : next);
+          setHover((current) => retainInitialTooltipPosition(current, next, pointerPosition(event, containerRef)));
         }
       }}
       onPointerOut={(event) => {
         event.stopPropagation();
         const leavingKey = hoveredKeys.current[kind];
-        setHover((current) => current?.key === leavingKey ? null : current);
+        setHover((current) => clearTooltipForKey(current, leavingKey));
       }}
     >
       <meshBasicMaterial color={CITY_3D_STYLE.baseRoads[kind].color} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
@@ -64,8 +87,9 @@ function RoadMeshes({ paths, setHover }) {
   ));
 }
 
-function ProceduralBuildings({ buildings, setHover }) {
+function ProceduralBuildings({ buildings, setHover, containerRef, cyberEffects }) {
   const meshRef = useRef(null);
+  const materialRef = useRef(null);
   useLayoutEffect(() => {
     if (!meshRef.current) return;
     const matrix = new THREE.Matrix4();
@@ -83,6 +107,15 @@ function ProceduralBuildings({ buildings, setHover }) {
     meshRef.current.instanceMatrix.needsUpdate = true;
     if (meshRef.current.instanceColor) meshRef.current.instanceColor.needsUpdate = true;
   }, [buildings]);
+  useLayoutEffect(() => {
+    updateProceduralBuildingMaterial(materialRef.current, cyberEffects ? "cyberpunk" : "normal");
+    return () => updateProceduralBuildingMaterial(materialRef.current, "normal");
+  }, [cyberEffects]);
+  useFrame(({ clock }) => {
+    if (!materialRef.current) return;
+    // ai coding：每帧统一应用模式材质；普通模式持续为零自发光，再次进入赛博模式则恢复动态流光。
+    updateProceduralBuildingMaterial(materialRef.current, cyberEffects ? "cyberpunk" : "normal", clock.elapsedTime);
+  });
 
   if (!buildings.length) return null;
   return (
@@ -94,7 +127,10 @@ function ProceduralBuildings({ buildings, setHover }) {
       onPointerOver={(event) => {
         event.stopPropagation();
         const building = buildings[event.instanceId];
-        if (building) setHover({ key: building.id, type: "程序化建筑", name: building.name, position: [building.x, building.height + 0.8, building.z] });
+        if (building) {
+          const item = { key: building.id, type: "程序化建筑", name: building.name };
+          setHover((current) => retainInitialTooltipPosition(current, item, pointerPosition(event, containerRef)));
+        }
       }}
       onPointerMove={(event) => event.stopPropagation()}
       onPointerOut={(event) => {
@@ -103,13 +139,13 @@ function ProceduralBuildings({ buildings, setHover }) {
       }}
     >
       <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial roughness={0.76} vertexColors />
+      <meshStandardMaterial ref={materialRef} roughness={cyberEffects ? 0.42 : 0.76} vertexColors />
     </instancedMesh>
   );
 }
 
-function createPlaceLineGeometry(points, width, elevation) {
-  return createRoadGeometry([{ kind: "local", points }], "local", width, elevation).geometry;
+function createPlaceLineGeometry(points, width, elevation, thickness) {
+  return createRoadGeometry([{ kind: "local", points }], "local", width, elevation, thickness).geometry;
 }
 
 function createPlacePolygonGeometry(points) {
@@ -128,22 +164,32 @@ function createPlacePolygonGeometry(points) {
   return geometry;
 }
 
-function UserPlaces({ places, setHover }) {
+function UserPlaces({ places, hover, setHover, containerRef, onSelect, cyberEffects }) {
   const geometries = useMemo(() => places.map((place) => {
-    if (place.geometryType === "Polygon") return { visible: createPlacePolygonGeometry(place.points) };
+    if (place.geometryType === "Polygon") return {
+      visible: createPlacePolygonGeometry(place.points),
+      highlight: createPlaceLineGeometry(
+        place.points,
+        CITY_3D_STYLE.polygon.highlightWidth,
+        CITY_3D_STYLE.polygon.elevation + 0.025,
+        CITY_3D_STYLE.polygon.highlightThickness,
+      ),
+    };
     if (place.geometryType === "LineString") {
       const lineClass = classifyLinearPlace(place);
       const style = CITY_3D_STYLE.userLines[lineClass];
       return {
         lineClass,
-        visible: createPlaceLineGeometry(place.points, style.visibleWidth, style.elevation),
-        hit: createPlaceLineGeometry(place.points, style.hitWidth, style.elevation),
+        visible: createPlaceLineGeometry(place.points, style.visibleWidth, style.elevation, style.thickness),
+        highlight: createPlaceLineGeometry(place.points, style.highlightWidth, style.elevation - 0.004, style.thickness),
+        hit: createPlaceLineGeometry(place.points, style.hitWidth, style.elevation, style.thickness),
       };
     }
     return null;
   }), [places]);
   useEffect(() => () => geometries.forEach((geometry) => {
     geometry?.visible.dispose();
+    geometry?.highlight?.dispose();
     geometry?.hit?.dispose();
   }), [geometries]);
   const placeBuildings = useMemo(() => places.map((place) => (
@@ -154,25 +200,29 @@ function UserPlaces({ places, setHover }) {
     const buildings = placeBuildings[index];
     const lineClass = geometries[index]?.lineClass;
     const profile = classifyPlaceBuilding(place);
-    const hoverHeight = buildings.length ? Math.max(...buildings.map(({ height }) => height)) + 0.65 : 0.72;
-    const position = buildings.length
-      ? [buildings.reduce((sum, item) => sum + item.x, 0) / buildings.length, hoverHeight, buildings.reduce((sum, item) => sum + item.z, 0) / buildings.length]
-      : pathAnchor(place.points, hoverHeight);
     const typeLabel = place.geometryType === "LineString"
       ? `用户地点 · ${lineClass === "water" ? "河流/水系" : "道路/线"}`
       : `用户地点 · ${profile.label}`;
     const interaction = createPlaceHoverStrategy(place);
-    const handlers = hoverHandlers({ key: interaction.hoverKey, type: typeLabel, name: place.name }, setHover, position);
+    const highlighted = isUserPlaceHovered(hover, interaction.hoverKey);
+    // ai coding：3D 用户几何只传回稳定地点 id，复用 App 与 2D 地图共用的详情状态和 PlaceDetails。
+    const handlers = hoverHandlers({ id: place.id, key: interaction.hoverKey, type: typeLabel, name: place.name }, setHover, containerRef, onSelect);
     if (place.geometryType === "Point") return (
-      <PlaceBuildingGroup key={place.key} buildings={buildings} handlers={handlers} />
+      <PlaceBuildingGroup key={place.key} buildings={buildings} handlers={handlers} highlighted={highlighted} cyberEffects={cyberEffects} />
     );
     if (place.geometryType === "LineString") return (
       <group key={place.key}>
         <mesh geometry={geometries[index].hit} {...handlers}>
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} />
         </mesh>
+        {highlighted && (
+          <mesh geometry={geometries[index].highlight} renderOrder={3} raycast={() => null}>
+            <meshBasicMaterial color={CITY_3D_STYLE.userLines[lineClass].highlightColor} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
+          </mesh>
+        )}
         <mesh geometry={geometries[index].visible} renderOrder={3} raycast={() => null}>
-          <meshStandardMaterial color={CITY_3D_STYLE.userLines[lineClass].color} roughness={lineClass === "water" ? 0.34 : 0.8} side={THREE.DoubleSide} />
+          {/* ai coding：保留正常深度遮挡，仅用薄实体侧面和轻微 polygon offset 稳定低视角道路，不让道路穿透建筑。 */}
+          <meshStandardMaterial color={CITY_3D_STYLE.userLines[lineClass].color} roughness={lineClass === "water" ? 0.34 : 0.8} side={THREE.DoubleSide} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
         </mesh>
       </group>
     );
@@ -181,7 +231,12 @@ function UserPlaces({ places, setHover }) {
         <mesh geometry={geometries[index].visible} renderOrder={2} raycast={() => null}>
           <meshStandardMaterial color={profile.color} transparent opacity={CITY_3D_STYLE.polygon.opacity} roughness={0.8} depthWrite={false} side={THREE.DoubleSide} />
         </mesh>
-        <PlaceBuildingGroup buildings={buildings} disableRaycast={interaction.disableBuildingRaycast} />
+        <PlaceBuildingGroup buildings={buildings} disableRaycast={interaction.disableBuildingRaycast} cyberEffects={cyberEffects} />
+        {highlighted && (
+          <mesh geometry={geometries[index].highlight} renderOrder={4} raycast={() => null}>
+            <meshBasicMaterial color={CITY_3D_STYLE.polygon.highlightColor} side={THREE.DoubleSide} depthWrite={false} polygonOffset polygonOffsetFactor={-2} polygonOffsetUnits={-2} />
+          </mesh>
+        )}
         {/* ai coding：整片区域只保留一个透明命中面，tooltip 在同一 Polygon 的多栋楼之间移动时维持同一 hover key。 */}
         <mesh geometry={geometries[index].visible} {...handlers}>
           <meshBasicMaterial transparent opacity={0} depthWrite={false} colorWrite={false} side={THREE.DoubleSide} />
@@ -191,7 +246,7 @@ function UserPlaces({ places, setHover }) {
   });
 }
 
-function PlaceBuildingGroup({ buildings, handlers = {}, disableRaycast = false }) {
+function PlaceBuildingGroup({ buildings, handlers = {}, disableRaycast = false, highlighted = false, cyberEffects = false }) {
   return (
     <group {...handlers}>
       {/* ai coding：用户地点由分类后的独立建筑数据驱动；主体与屋顶拆分，便于后续增加窗户和牌匾。 */}
@@ -200,10 +255,14 @@ function PlaceBuildingGroup({ buildings, handlers = {}, disableRaycast = false }
           <mesh position={[0, building.height / 2, 0]} castShadow receiveShadow raycast={disableRaycast ? () => null : undefined}>
             <boxGeometry args={[building.width, building.height, building.depth]} />
             <meshStandardMaterial color={building.color} roughness={0.72} />
+            {cyberEffects && <Edges color="#00f5ff" lineWidth={1.6} raycast={() => null} />}
+            {highlighted && <Edges color={CITY_3D_STYLE.pointHighlight.color} lineWidth={CITY_3D_STYLE.pointHighlight.lineWidth} raycast={() => null} />}
           </mesh>
           <mesh position={[0, building.height + 0.035, 0]} castShadow raycast={disableRaycast ? () => null : undefined}>
             <boxGeometry args={[building.width * 1.04, 0.07, building.depth * 1.04]} />
             <meshStandardMaterial color={building.roof} roughness={0.78} />
+            {cyberEffects && <Edges color="#ff4fd8" lineWidth={1.4} raycast={() => null} />}
+            {highlighted && <Edges color={CITY_3D_STYLE.pointHighlight.color} lineWidth={CITY_3D_STYLE.pointHighlight.lineWidth} raycast={() => null} />}
           </mesh>
         </group>
       ))}
@@ -211,52 +270,79 @@ function PlaceBuildingGroup({ buildings, handlers = {}, disableRaycast = false }
   );
 }
 
-function CityScene({ projection, roadPaths, buildings, userPlaces }) {
+function CyberGroundWaves({ extent }) {
+  const rings = useRef([]);
+  useFrame(({ clock }) => {
+    rings.current.forEach((ring, index) => {
+      if (!ring) return;
+      const progress = (clock.elapsedTime * 0.16 + index / 3) % 1;
+      ring.scale.setScalar(0.7 + progress * 4.5);
+      ring.material.opacity = (1 - progress) * 0.48;
+    });
+  });
+  return (
+    <group position={[0, 0.045, 0]} raycast={() => null}>
+      {[0, 1, 2].map((index) => <mesh key={index} ref={(node) => { rings.current[index] = node; }} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+        <ringGeometry args={[extent * 0.035, extent * 0.041, 64]} />
+        <meshBasicMaterial color={index % 2 ? "#ff37cf" : "#00eaff"} transparent opacity={0.4} depthWrite={false} side={THREE.DoubleSide} />
+      </mesh>)}
+    </group>
+  );
+}
+
+function BoundedMapControls({ projection, cameraConfig }) {
+  const controlsRef = useRef(null);
+  const panBounds = useMemo(() => getCity3DPanBounds(projection), [projection]);
+  // ai coding：保持 onChange 引用稳定，避免 drei 在 hover 重渲染时 dispose/reconnect controls，导致当前 pointerup 丢失并锁住后续手势。
+  const enforceBounds = useCallback(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
+    applyCity3DPanBounds(controls, panBounds);
+  }, [panBounds]);
+  // 仅在越界时同步平移 target 与 camera；默认 target 已是原点，不传易在重渲染时重置的数组 prop。
+  useFrame(enforceBounds);
+  return <MapControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.08} maxPolarAngle={Math.PI / 2.08} minDistance={cameraConfig.minDistance} maxDistance={cameraConfig.maxDistance} onChange={enforceBounds} />;
+}
+
+function CityScene({ projection, roadPaths, buildings, userPlaces, hover, setHover, containerRef, onSelect, visualMode }) {
   const extent = Math.max(projection.width, projection.height);
   const cameraConfig = getCity3DCameraConfig(extent);
-  const [hover, setHover] = useState(null);
+  const capabilities = getVisualModeCapabilities(visualMode);
+  const cyber = capabilities.cyberEffects;
   return (
     <>
-      <color attach="background" args={["#dce8e1"]} />
-      <fog attach="fog" args={["#dce8e1", extent * 0.8, extent * 2.1]} />
-      <hemisphereLight args={["#f5fbf7", "#829a8d", 1.5]} />
+      <color attach="background" args={[cyber ? "#060817" : "#dce8e1"]} />
+      <fog attach="fog" args={[cyber ? "#080b20" : "#dce8e1", extent * 0.8, extent * 2.1]} />
+      <hemisphereLight args={[cyber ? "#83eeff" : "#f5fbf7", cyber ? "#29194f" : "#829a8d", 1.5]} />
       <directionalLight position={[-35, 70, 30]} intensity={2.1} castShadow shadow-mapSize={[1024, 1024]} />
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[projection.width + 8, projection.height + 8]} />
-        <meshStandardMaterial color="#a9bea9" roughness={1} />
+        <meshStandardMaterial color={cyber ? "#101932" : capabilities.mode === "minimal" ? "#e8ece8" : "#a9bea9"} roughness={1} />
       </mesh>
-      <gridHelper args={[extent, 20, "#759486", "#9bb1a4"]} position={[0, 0.025, 0]} />
-      <RoadMeshes paths={roadPaths} setHover={setHover} />
-      <ProceduralBuildings buildings={buildings} setHover={setHover} />
-      <UserPlaces places={userPlaces} setHover={setHover} />
-      {/* ai coding：场景内 Html 不接收指针，避免 tooltip 自身触发模型 pointer out 导致闪烁。 */}
-      {hover && (
-        <Html position={hover.position} center zIndexRange={[20, 10]} style={{ pointerEvents: "none" }}>
-          <div className="city3d-tooltip" role="tooltip">
-            <span>{hover.type}</span>
-            <strong>{hover.name}</strong>
-          </div>
-        </Html>
-      )}
-      <MapControls
-        makeDefault
-        enableDamping
-        dampingFactor={0.08}
-        maxPolarAngle={Math.PI / 2.08}
-        minDistance={cameraConfig.minDistance}
-        maxDistance={cameraConfig.maxDistance}
-        target={[0, 0, 0]}
-      />
+      {capabilities.mode !== "minimal" && <gridHelper args={[extent, 20, cyber ? "#e42ad5" : "#759486", cyber ? "#143f65" : "#9bb1a4"]} position={[0, 0.025, 0]} />}
+      {cyber && <CyberGroundWaves extent={extent} />}
+      {capabilities.showBaseRoads && <RoadMeshes paths={roadPaths} setHover={setHover} containerRef={containerRef} />}
+      {capabilities.showProceduralBuildings && <ProceduralBuildings buildings={buildings} setHover={setHover} containerRef={containerRef} cyberEffects={cyber} />}
+      <UserPlaces places={userPlaces} hover={hover} setHover={setHover} containerRef={containerRef} onSelect={onSelect} cyberEffects={cyber} />
+      <BoundedMapControls projection={projection} cameraConfig={cameraConfig} />
     </>
   );
 }
 
-export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, places, onRoadStatus }) {
+export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, places, onRoadStatus, onSelect, visualMode = "normal" }) {
   const [loadState, setLoadState] = useState({ loading: true, error: "", data: null });
   const [retry, setRetry] = useState(0);
   const projection = useMemo(() => createLocalProjection(bounds), [bounds]);
+  const containerRef = useRef(null);
+  const [hover, setHover] = useState(null);
+  const capabilities = getVisualModeCapabilities(visualMode);
 
   useEffect(() => {
+    if (!capabilities.showBaseRoads) {
+      setLoadState({ loading: false, error: "", data: [] });
+      onRoadStatus?.("ready", "极简模式已隐藏基础道路");
+      return undefined;
+    }
     const controller = new AbortController();
     setLoadState({ loading: true, error: "", data: null });
     fetch(baseRoadsPath, { signal: controller.signal })
@@ -276,7 +362,7 @@ export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, plac
         onRoadStatus?.("error", `加载失败（${error.message}）`);
       });
     return () => controller.abort();
-  }, [baseRoadsPath, projection, retry, onRoadStatus]);
+  }, [baseRoadsPath, projection, retry, onRoadStatus, capabilities.showBaseRoads]);
 
   const userPlaces = useMemo(() => projectUserPlaces(places, projection), [places, projection]);
   const buildings = useMemo(() => loadState.data
@@ -294,24 +380,17 @@ export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, plac
 
   const extent = Math.max(projection.width, projection.height);
   return (
-    <div id="city-3d" className="city3d-view" role="region" aria-label={`${mapName} 3D 城市浏览视图`}>
+    <div ref={containerRef} id="city-3d" className={`city3d-view city3d-${capabilities.mode}`} role="region" aria-label={`${mapName} 3D 城市浏览视图`}>
       <Canvas
         shadows
         dpr={[1, 1.5]}
         camera={{ position: [extent * 0.52, extent * 0.58, extent * 0.52], fov: 42, near: 0.1, far: extent * 5 }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
-        <CityScene projection={projection} roadPaths={loadState.data} buildings={buildings} userPlaces={userPlaces} />
+        <CityScene projection={projection} roadPaths={loadState.data} buildings={buildings} userPlaces={userPlaces} hover={hover} setHover={setHover} containerRef={containerRef} onSelect={onSelect} visualMode={visualMode} />
       </Canvas>
       <div className="city3d-guide" aria-hidden="true">左键拖拽平移 · 右键拖拽调整视角 · 滚轮缩放</div>
-      <div className="city3d-legend">
-        <strong>3D 城市示意</strong>
-        <span><i className="legend-road" />只读基础道路</span>
-        <span><i className="legend-water" />用户河流 / 水系</span>
-        <span><i className="legend-building" />地点建筑 / 建筑群</span>
-        <span><i className="legend-city-building" />背景建筑示意</span>
-        {!loadState.data.length && <small>当前道路数据为空，仅显示地面与建筑示意。</small>}
-      </div>
+      {hover && <div className="city3d-tooltip" role="tooltip" style={{ left: hover.position.x, top: hover.position.y }}><span>{hover.type}</span><strong>{hover.name}</strong></div>}
     </div>
   );
 }

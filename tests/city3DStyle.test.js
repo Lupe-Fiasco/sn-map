@@ -10,11 +10,11 @@ test("相机允许靠近模型并保留与场景尺度相关的最远距离", ()
   assert.ok(camera.maxDistance > camera.minDistance * 20);
 });
 
-test("用户线兼容 type、name、label 等字段并区分蓝色水系与灰色道路", () => {
+test("用户线优先采用类型字段并以金橙色道路区分蓝色水系和灰色基础道路", () => {
   const lakesideRoad = classifyLinearPlace({ properties: { type: "road", name: "湖滨路" } });
   const namedRiver = classifyLinearPlace({ properties: { type: "river", name: "人民路" } });
   assert.equal(lakesideRoad, "road");
-  assert.equal(CITY_3D_STYLE.userLines[lakesideRoad].color, "#727b80");
+  assert.equal(CITY_3D_STYLE.userLines[lakesideRoad].color, "#d88a1d");
   assert.equal(namedRiver, "water");
   assert.equal(CITY_3D_STYLE.userLines[namedRiver].color, "#3189bd");
   assert.equal(classifyLinearPlace({ properties: { type: "river" } }), "water");
@@ -23,9 +23,15 @@ test("用户线兼容 type、name、label 等字段并区分蓝色水系与灰�
   assert.equal(classifyLinearPlace({ properties: { type_id: "road", name: "人民路" } }), "road");
   assert.equal(classifyLinearPlace({ category: "highway" }), "road");
   assert.equal(CITY_3D_STYLE.userLines.water.color, "#3189bd");
-  assert.equal(CITY_3D_STYLE.userLines.road.color, "#727b80");
+  assert.equal(CITY_3D_STYLE.userLines.road.color, "#d88a1d");
   assert.ok(CITY_3D_STYLE.userLines.water.visibleWidth >= 0.24);
   assert.ok(Object.values(CITY_3D_STYLE.baseRoads).every(({ color, width }) => color.startsWith("#") && width >= 0.28));
+  assert.ok(Object.values(CITY_3D_STYLE.baseRoads).every(({ color }) => color !== CITY_3D_STYLE.userLines.road.color));
+  assert.ok(Object.values(CITY_3D_STYLE.baseRoads).every(({ elevation, thickness }) => elevation > thickness && thickness > 0));
+  assert.ok(Object.values(CITY_3D_STYLE.userLines).every(({ elevation, thickness }) => elevation > thickness && thickness > 0));
+  assert.ok(Object.values(CITY_3D_STYLE.userLines).every(({ visibleWidth, highlightWidth, hitWidth, highlightColor }) => visibleWidth < highlightWidth && highlightWidth < hitWidth && highlightColor.startsWith("#")));
+  assert.ok(CITY_3D_STYLE.polygon.highlightWidth > 0);
+  assert.ok(CITY_3D_STYLE.pointHighlight.lineWidth > 1);
 });
 
 test("地点分类提供不同建筑类型和高度档位", () => {

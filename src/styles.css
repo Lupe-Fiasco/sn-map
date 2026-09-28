@@ -26,11 +26,24 @@ body {
     margin: 0;
     min-width: 1000px;
 }
+/* ai coding：审核门禁在地图挂载前也必须建立完整页面画布，避免短内容下露出浏览器默认白底。 */
+.approval-page {
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #f6f7f2;
+}
 .site-header,
-.top-card-row,
+.site-header-inner,
 main,
 footer {
     width: min(1440px, calc(100% - 48px));
+    margin-inline: auto;
+}
+/* ai coding：公开快照单独恢复内容宽度，不复用或覆盖管理端 Header 的独立布局参数。 */
+.public-header,
+:where(#root:has(> .public-header) > footer) {
+    width: calc(100% - 48px);
+    max-width: 1440px;
     margin-inline: auto;
 }
 .site-header {
@@ -40,11 +53,193 @@ footer {
     gap: 24px;
     padding: 38px 0 24px;
 }
+.site-header.management-header {
+    position: fixed;
+    z-index: 3000;
+    top: 0;
+    right: 0;
+    left: 0;
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border-bottom: 1px solid rgba(187, 203, 194, 0.9);
+    background: rgba(246, 247, 242, 0.96);
+    box-shadow: 0 5px 24px rgba(25, 51, 46, 0.08);
+    backdrop-filter: blur(12px);
+}
+.site-header-inner {
+    display: flex;
+    min-height: 108px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 14px 0;
+}
+.header-brand {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 22px;
+}
+.header-brand .eyebrow {
+    flex: 0 0 auto;
+    margin: 0;
+}
+.header-brand h1 {
+    margin-bottom: 3px;
+    font-size: 1.55rem;
+}
+.header-brand .intro {
+    font-size: 0.78rem;
+    line-height: 1.45;
+}
 .header-tools {
     display: flex;
     align-items: flex-end;
     justify-content: flex-end;
     gap: 12px;
+}
+.account-menu {
+    position: relative;
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+}
+.settings-menu-trigger {
+    display: inline-flex;
+    min-height: 48px;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 11px;
+    border: 1px solid #c8d3cc;
+    border-radius: 10px;
+    color: #31564c;
+    background: #fff;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.settings-menu-trigger:hover,
+.settings-menu-trigger[aria-expanded="true"] {
+    border-color: #70a18f;
+    background: #f2f8f5;
+}
+.settings-menu-trigger svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    stroke-width: 1.6;
+}
+.account-menu-trigger {
+    display: grid;
+    min-width: 142px;
+    min-height: 48px;
+    grid-template-columns: 28px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border: 1px solid #c8d3cc;
+    border-radius: 10px;
+    color: #19332e;
+    background: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.account-menu-trigger:hover,
+.account-menu-trigger[aria-expanded="true"] {
+    border-color: #70a18f;
+    background: #f2f8f5;
+}
+.account-menu-trigger svg {
+    width: 28px;
+    height: 28px;
+    padding: 4px;
+    border-radius: 50%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.7;
+    background: #e4f1eb;
+}
+.account-menu-trigger span {
+    max-width: 150px;
+    overflow: hidden;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.account-menu-trigger b {
+    padding: 2px 5px;
+    border-radius: 999px;
+    color: #0e5f4b;
+    background: #dff1e8;
+    font-size: 0.6rem;
+}
+.account-menu-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    width: min(560px, calc(100vw - 48px));
+    max-height: calc(100vh - 132px);
+    padding: 10px;
+    overflow-y: auto;
+    border: 1px solid #cbd8d0;
+    border-radius: 14px;
+    background: #f6f8f6;
+    box-shadow: 0 18px 55px rgba(17, 47, 39, 0.22);
+}
+.account-menu-panel .auth-card,
+.account-menu-panel .admin-card {
+    box-shadow: none;
+}
+.account-menu-panel .admin-card {
+    margin-top: 10px;
+}
+.visual-mode-settings {
+    padding: 12px;
+}
+.visual-mode-settings h2 {
+    margin-bottom: 6px;
+}
+.visual-mode-settings > p:not(.section-label) {
+    margin-bottom: 14px;
+    color: #60716d;
+    font-size: 0.78rem;
+}
+.visual-mode-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+.visual-mode-options button {
+    display: grid;
+    gap: 5px;
+    min-height: 90px;
+    padding: 12px;
+    border: 1px solid #ced9d2;
+    border-radius: 9px;
+    color: #31564c;
+    background: #fff;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.visual-mode-options button:hover,
+.visual-mode-options button.active {
+    border-color: #16785f;
+    background: #edf7f2;
+    box-shadow: inset 0 0 0 1px #16785f;
+}
+.visual-mode-options button span {
+    color: #60716d;
+    font-size: 0.7rem;
+    line-height: 1.4;
 }
 .map-selector {
     display: grid;
@@ -63,6 +258,16 @@ footer {
     color: #16785f;
     font-size: 0.68rem;
     font-weight: 650;
+}
+.map-selection-card {
+    padding: 16px 18px;
+    border: 1px solid #dbe3dd;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fff 35%, #edf6f1);
+    box-shadow: 0 8px 28px rgba(35, 66, 56, 0.055);
+}
+.map-selection-card .map-selector {
+    min-width: 0;
 }
 h1,
 h2,
@@ -95,20 +300,13 @@ h2 {
     letter-spacing: 0.13em;
     text-transform: uppercase;
 }
-.top-card-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 18px;
-    margin-bottom: 18px;
-}
-.top-card-row.has-admin {
-    grid-template-columns: minmax(0, 1fr) 380px;
-    align-items: start;
-}
 main {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 380px;
     gap: 18px;
+}
+.management-workspace {
+    margin-top: 132px;
 }
 /* ai coding：地图与公开快照组成可收缩的主内容列，窄桌面下不撑开页面网格。 */
 .map-column {
@@ -218,6 +416,17 @@ main {
 .button.primary:hover:not(:disabled) {
     background: #11634e;
 }
+/* ai coding：视觉禁用规则置于 primary/hover 之后且提高同级优先级，3D 下保持可点击但不会恢复主按钮绿色。 */
+.button.is-disabled,
+.button.is-disabled:hover,
+.button.primary.is-disabled,
+.button.primary.is-disabled:hover:not(:disabled) {
+    border-color: #c8d3cc;
+    color: #60716d;
+    background: #eef1ef;
+    opacity: 0.58;
+    cursor: not-allowed;
+}
 .button.danger-text {
     color: #b0443c;
 }
@@ -225,6 +434,8 @@ main {
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
+.account-menu-trigger:focus-visible,
+.settings-menu-trigger:focus-visible,
 .icon-button:focus-visible,
 .type-select-trigger:focus-visible {
     outline: 3px solid rgba(22, 120, 95, 0.22);
@@ -273,8 +484,7 @@ textarea:focus-visible,
     justify-content: center;
     gap: 8px;
 }
-.city3d-guide,
-.city3d-legend {
+.city3d-guide {
     position: absolute;
     z-index: 2;
     color: #ecf5f0;
@@ -291,47 +501,10 @@ textarea:focus-visible,
     font-size: 0.7rem;
     font-weight: 650;
 }
-.city3d-legend {
-    right: 14px;
-    bottom: 14px;
-    display: grid;
-    min-width: 164px;
-    gap: 7px;
-    padding: 11px 12px;
-    border-radius: 8px;
-    font-size: 0.7rem;
-}
-.city3d-legend strong {
-    font-size: 0.76rem;
-}
-.city3d-legend span {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-}
-.city3d-legend i {
-    display: inline-block;
-    width: 18px;
-    height: 5px;
-    border-radius: 2px;
-}
-.city3d-legend .legend-road {
-    background: #858d91;
-}
-.city3d-legend .legend-building {
-    height: 10px;
-    background: #b27a62;
-}
-.city3d-legend .legend-water {
-    background: #3189bd;
-}
-.city3d-legend .legend-city-building {
-    height: 9px;
-    background: #b9aa91;
-}
-
-/* ai coding：3D tooltip 完全穿透鼠标，紧凑双层信息在地图明暗背景上均可读。 */
+/* ai coding：tooltip 使用首次进入时相对 3D 容器的鼠标坐标，后续移动不再跟随。 */
 .city3d-tooltip {
+  position: absolute;
+  z-index: 3;
   min-width: max-content;
   max-width: 260px;
   padding: 7px 10px 8px;
@@ -342,7 +515,7 @@ textarea:focus-visible,
   color: #fff;
   line-height: 1.25;
   pointer-events: none;
-  transform: translateY(-8px);
+  transform: translate(12px, 12px);
 }
 
 .city3d-tooltip span,
@@ -363,11 +536,6 @@ textarea:focus-visible,
   font-size: 14px;
   font-weight: 700;
 }
-.city3d-legend small {
-    max-width: 190px;
-    color: #d4e2dc;
-    line-height: 1.4;
-}
 .map-loading {
     display: grid;
     place-items: center;
@@ -378,6 +546,77 @@ textarea:focus-visible,
 }
 .leaflet-container {
     font-family: inherit;
+}
+/* ai coding：赛博滤镜严格限制在瓦片 pane，不影响用户地点 SVG、控件、弹层和文字。 */
+.map-visual-cyberpunk {
+    background: #07101d;
+}
+.map-visual-cyberpunk .leaflet-tile-pane {
+    filter: invert(0.92) hue-rotate(168deg) saturate(1.35) brightness(0.68) contrast(1.12);
+}
+.map-visual-cyberpunk .leaflet-control-container {
+    filter: none;
+}
+/* 三种模式共用结构；赛博主题只强化界面边缘，确保表单与地点内容维持高对比度。 */
+html[data-visual-mode="cyberpunk"] body {
+    --cyber-surface: rgba(12, 20, 42, 0.94);
+    --cyber-surface-strong: #10182f;
+    --cyber-surface-raised: #16203d;
+    --cyber-border: #216d82;
+    --cyber-text: #e6fbff;
+    --cyber-muted: #9fc8d3;
+    --cyber-cyan: #68edff;
+    --cyber-purple: #bd93ff;
+    --cyber-danger: #ff9caf;
+    --cyber-warning: #ffd18a;
+    color: var(--cyber-text);
+    background: #070b18;
+}
+html[data-visual-mode="cyberpunk"] .approval-page {
+    background: #070b18;
+}
+html[data-visual-mode="cyberpunk"] .management-header {
+    border-color: rgba(0, 234, 255, 0.38);
+    background: rgba(8, 13, 28, 0.96);
+    box-shadow: 0 5px 28px rgba(0, 234, 255, 0.13);
+}
+html[data-visual-mode="cyberpunk"] .header-brand h1,
+html[data-visual-mode="cyberpunk"] .account-menu-trigger,
+html[data-visual-mode="cyberpunk"] .settings-menu-trigger {
+    color: #d9fbff;
+}
+html[data-visual-mode="cyberpunk"] .account-menu-trigger,
+html[data-visual-mode="cyberpunk"] .settings-menu-trigger {
+    border-color: #245b73;
+    background: #111a31;
+}
+html[data-visual-mode="cyberpunk"] .map-panel,
+html[data-visual-mode="cyberpunk"] .map-selection-card {
+    border-color: #1c6574;
+    background: #10172b;
+    box-shadow: 0 0 22px rgba(0, 234, 255, 0.11);
+}
+html[data-visual-mode="cyberpunk"] .map-panel .panel-heading {
+    border-color: #23485c;
+    color: #d9fbff;
+}
+html[data-visual-mode="cyberpunk"] .map-selection-card .map-selector,
+html[data-visual-mode="cyberpunk"] .map-selection-card small {
+    color: #7cecff;
+}
+html[data-visual-mode="cyberpunk"] footer {
+    color: #9bdce5;
+}
+html[data-visual-mode="minimal"] body {
+    background: #fafafa;
+}
+html[data-visual-mode="minimal"] .approval-page {
+    background: #fafafa;
+}
+html[data-visual-mode="minimal"] .map-panel,
+html[data-visual-mode="minimal"] .map-selection-card {
+    border-color: #dedede;
+    box-shadow: none;
 }
 .leaflet-container.adding-place {
     cursor: crosshair;
@@ -1590,6 +1829,231 @@ footer {
     padding-block: 4px;
     font-size: 0.73rem;
 }
+
+/* ai coding：赛博主题覆盖首页及公开页的全部通用表面和状态组件；作用域隔离普通/极简模式。 */
+html[data-visual-mode="cyberpunk"] :is(h1, h2, h3, h4, .detail-name, .place-name, .data-summary) {
+    color: var(--cyber-text);
+}
+html[data-visual-mode="cyberpunk"] :is(
+    .intro, .visual-mode-settings > p:not(.section-label), .map-selector, .place-type,
+    .empty-state, .file-status, .form-help, .unsynced-legend, .editor-panel label,
+    .detail-type, .detail-list dt, .place-images-heading small, .image-loading,
+    .cloud-status span:last-child, .status-list li, .auth-form label, .snapshot-label,
+    .auth-note, .snapshot-options legend, .snapshot-presets small, .snapshot-current-level,
+    .public-details dt, .approval-card > p:not(.section-label), .approval-list div > span
+) {
+    color: var(--cyber-muted);
+}
+html[data-visual-mode="cyberpunk"] :is(.eyebrow, .section-label, .map-selector small) {
+    color: var(--cyber-cyan);
+}
+html[data-visual-mode="cyberpunk"] :is(
+    .map-panel, .status-card, .place-card, .data-card, .auth-card, .snapshot-card,
+    .admin-card, .approval-card, .map-selection-card, .share-message, .confirm-dialog
+) {
+    border-color: var(--cyber-border);
+    color: var(--cyber-text);
+    background: var(--cyber-surface);
+    box-shadow: 0 0 0 1px rgba(189, 147, 255, 0.08), 0 10px 32px rgba(0, 234, 255, 0.1);
+}
+html[data-visual-mode="cyberpunk"] :is(.panel-heading, .place-list li, .detail-list div, .place-images, .status-list li, .approval-list > li) {
+    border-color: rgba(104, 237, 255, 0.22);
+}
+html[data-visual-mode="cyberpunk"] .account-menu-panel {
+    border-color: var(--cyber-border);
+    color: var(--cyber-text);
+    background: rgba(7, 12, 27, 0.98);
+    box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55), 0 0 24px rgba(0, 234, 255, 0.14);
+}
+html[data-visual-mode="cyberpunk"] :is(.settings-menu-trigger, .account-menu-trigger):hover,
+html[data-visual-mode="cyberpunk"] :is(.settings-menu-trigger, .account-menu-trigger)[aria-expanded="true"] {
+    border-color: var(--cyber-cyan);
+    color: var(--cyber-text);
+    background: var(--cyber-surface-raised);
+}
+html[data-visual-mode="cyberpunk"] .account-menu-trigger svg {
+    color: var(--cyber-cyan);
+    background: rgba(27, 87, 111, 0.42);
+}
+html[data-visual-mode="cyberpunk"] :is(.account-menu-trigger b, .count-badge, .publish-badge.public, .approval-badge.approved) {
+    color: #8df5ff;
+    background: rgba(19, 109, 130, 0.36);
+}
+html[data-visual-mode="cyberpunk"] .visual-mode-options button {
+    border-color: #2a526d;
+    color: var(--cyber-text);
+    background: var(--cyber-surface-strong);
+}
+html[data-visual-mode="cyberpunk"] .visual-mode-options button span {
+    color: var(--cyber-muted);
+}
+html[data-visual-mode="cyberpunk"] .visual-mode-options button:hover,
+html[data-visual-mode="cyberpunk"] .visual-mode-options button.active {
+    border-color: var(--cyber-cyan);
+    background: rgba(22, 39, 72, 0.98);
+    box-shadow: inset 0 0 0 1px rgba(189, 147, 255, 0.55), 0 0 14px rgba(0, 234, 255, 0.13);
+}
+html[data-visual-mode="cyberpunk"] :is(input, select, textarea, .type-select-trigger) {
+    border-color: #315a73;
+    color: var(--cyber-text);
+    background-color: #0b142b;
+    color-scheme: dark;
+}
+html[data-visual-mode="cyberpunk"] :is(input, textarea)::placeholder {
+    color: #789aa8;
+}
+html[data-visual-mode="cyberpunk"] :is(input[type="checkbox"], input[type="radio"]) {
+    accent-color: var(--cyber-cyan);
+}
+html[data-visual-mode="cyberpunk"] .type-select-options {
+    border-color: var(--cyber-border);
+    color: var(--cyber-text);
+    background: #0b142b;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+}
+html[data-visual-mode="cyberpunk"] .type-select-options li {
+    color: var(--cyber-text);
+}
+html[data-visual-mode="cyberpunk"] :is(.type-select-options li.active, .place-list button:hover, .place-list button:focus-visible, .public-place-list button[aria-pressed="true"]) {
+    color: var(--cyber-text);
+    background: rgba(26, 79, 105, 0.48);
+}
+html[data-visual-mode="cyberpunk"] .button {
+    border-color: #356079;
+    color: var(--cyber-text);
+    background: #111c36;
+}
+html[data-visual-mode="cyberpunk"] .button:hover:not(:disabled) {
+    border-color: var(--cyber-cyan);
+    background: #182746;
+}
+html[data-visual-mode="cyberpunk"] .button.primary {
+    border-color: #40dff4;
+    color: #04131d;
+    background: linear-gradient(135deg, #5deaff, #a98cff);
+}
+html[data-visual-mode="cyberpunk"] .button.primary:hover:not(:disabled) {
+    background: linear-gradient(135deg, #8af2ff, #c1a8ff);
+}
+html[data-visual-mode="cyberpunk"] .button.danger-text {
+    color: var(--cyber-danger);
+}
+html[data-visual-mode="cyberpunk"] :is(.button.is-disabled, .button.primary.is-disabled) {
+    border-color: #33455b;
+    color: #8296a5;
+    background: #172033;
+}
+html[data-visual-mode="cyberpunk"] .view-switch {
+    border-color: #315a73;
+    background: #0b142b;
+}
+html[data-visual-mode="cyberpunk"] .view-switch button {
+    color: var(--cyber-muted);
+}
+html[data-visual-mode="cyberpunk"] .view-switch button.active {
+    color: #07101d;
+    background: var(--cyber-cyan);
+}
+html[data-visual-mode="cyberpunk"] :is(.drawing-status, .contained-places, .cloud-status, .public-details) {
+    border-color: rgba(104, 237, 255, 0.28);
+    color: #ccebf2;
+    background: rgba(17, 40, 65, 0.76);
+}
+html[data-visual-mode="cyberpunk"] :is(.contained-places li, .auth-tabs button[aria-selected="true"], .snapshot-presets label:has(input:checked)) {
+    border-color: var(--cyber-cyan);
+    color: var(--cyber-cyan);
+    background: rgba(25, 91, 111, 0.42);
+}
+/* ai coding：覆盖普通主题中直接写死的深色前景，避免赛博深色卡片上的低对比控件。 */
+html[data-visual-mode="cyberpunk"] :is(.auth-tabs button, .snapshot-fields label, .icon-button) {
+    color: var(--cyber-muted);
+}
+html[data-visual-mode="cyberpunk"] :is(.auth-warning button, .icon-button:hover, .icon-button:focus-visible) {
+    color: var(--cyber-cyan);
+}
+html[data-visual-mode="cyberpunk"] .type-select-chevron {
+    border-color: var(--cyber-muted);
+}
+html[data-visual-mode="cyberpunk"] .snapshot-presets label {
+    border-color: #31536b;
+}
+html[data-visual-mode="cyberpunk"] :is(.place-list li.unsynced-place, .unsynced-legend i) {
+    background: rgba(38, 117, 91, 0.3);
+    box-shadow: inset 3px 0 #5deab1;
+}
+html[data-visual-mode="cyberpunk"] :is(.form-error, .image-load-error, .map-error, .city3d-message.error) {
+    border-color: #b64b76;
+    color: #ffc0cc;
+    background: #321629;
+}
+html[data-visual-mode="cyberpunk"] :is(.snapshot-warning, .cloud-status.fallback, .cloud-status.failed) {
+    border-color: #9b6b37;
+    color: var(--cyber-warning);
+    background: #302316;
+}
+html[data-visual-mode="cyberpunk"] :is(.auth-warning, .image-count-error) {
+    color: var(--cyber-warning);
+}
+html[data-visual-mode="cyberpunk"] :is(.city3d-message, .map-loading) {
+    color: var(--cyber-muted);
+    background: #080f22;
+}
+html[data-visual-mode="cyberpunk"] .image-loading span {
+    background: linear-gradient(90deg, #111b32, #203554, #111b32);
+    background-size: 200% 100%;
+}
+html[data-visual-mode="cyberpunk"] :is(.publish-badge, .approval-badge) {
+    color: var(--cyber-muted);
+    background: #202941;
+}
+html[data-visual-mode="cyberpunk"] :is(.approval-mark, .approval-badge:not(.approved):not(.rejected)) {
+    color: var(--cyber-warning);
+    background: #35291c;
+}
+html[data-visual-mode="cyberpunk"] :is(.approval-mark.rejected, .approval-badge.rejected) {
+    color: var(--cyber-danger);
+    background: #381b2a;
+}
+html[data-visual-mode="cyberpunk"] .confirm-overlay {
+    background: rgba(2, 5, 15, 0.78);
+}
+html[data-visual-mode="cyberpunk"] .confirm-dialog p {
+    color: var(--cyber-muted);
+}
+html[data-visual-mode="cyberpunk"] .toast {
+    border: 1px solid var(--cyber-cyan);
+    color: var(--cyber-text);
+    background: #101a35;
+    box-shadow: 0 0 20px rgba(0, 234, 255, 0.24);
+}
+html[data-visual-mode="cyberpunk"] :is(.button, input, select, textarea, .type-select-trigger, .account-menu-trigger, .settings-menu-trigger):focus-visible {
+    outline-color: rgba(104, 237, 255, 0.72);
+}
+/* Leaflet 控件和地点弹层不经过瓦片滤镜，需单独提供深色高对比表面。 */
+html[data-visual-mode="cyberpunk"] .map-visual-cyberpunk :is(.leaflet-bar a, .leaflet-control-layers, .leaflet-control-attribution, .leaflet-popup-content-wrapper, .leaflet-popup-tip, .leaflet-tooltip) {
+    border-color: #326b82;
+    color: var(--cyber-text);
+    background: rgba(10, 20, 39, 0.95);
+}
+html[data-visual-mode="cyberpunk"] .map-visual-cyberpunk .leaflet-bar a:hover {
+    color: #07101d;
+    background: var(--cyber-cyan);
+}
+html[data-visual-mode="cyberpunk"] .map-visual-cyberpunk .leaflet-control-attribution a {
+    color: var(--cyber-cyan);
+}
+/* ai coding：仅在赛博主题提亮 Leaflet 默认图层图标，并用高亮边框区分已展开的图层面板。 */
+:is(.theme-cyberpunk, [data-visual-mode="cyberpunk"]) .map-visual-cyberpunk .leaflet-control-layers-toggle {
+    filter: invert(89%) sepia(87%) saturate(1077%) hue-rotate(159deg) brightness(104%) contrast(103%) drop-shadow(0 0 4px rgba(104, 237, 255, 0.72));
+}
+:is(.theme-cyberpunk, [data-visual-mode="cyberpunk"]) .map-visual-cyberpunk .leaflet-control-layers-expanded {
+    box-shadow: inset 0 0 0 1px #68edff, 0 0 16px rgba(104, 237, 255, 0.24);
+}
+html[data-visual-mode="cyberpunk"] .map-visual-cyberpunk .pending-place-tooltip {
+    border-color: #d4b95f;
+    color: #fff1a8;
+    background: #302915;
+}
 @keyframes pulse {
     50% {
         opacity: 0.35;
@@ -1602,12 +2066,12 @@ footer {
     }
 }
 @media (max-width: 1100px) {
-    .site-header {
+    .site-header:not(.management-header) {
         align-items: stretch;
         flex-direction: column;
     }
     .header-tools {
-        align-items: stretch;
+        align-items: center;
     }
     .panel-heading,
     .map-heading-tools {
@@ -1621,18 +2085,21 @@ footer {
     body {
         min-width: 320px;
     }
-    .site-header,
-    .top-card-row,
+    .site-header:not(.management-header),
+    .site-header-inner,
     main,
     footer {
         width: min(100% - 24px, 680px);
     }
-    .site-header {
-        padding-top: 24px;
+    .site-header-inner {
+        min-height: 96px;
+        padding: 10px 0;
     }
-    .top-card-row.has-admin,
     main {
         grid-template-columns: 1fr;
+    }
+    .management-workspace {
+        margin-top: 112px;
     }
     .management-workspace > .info-panel {
         padding-top: 0;

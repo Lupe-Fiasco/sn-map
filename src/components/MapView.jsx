@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import L from "leaflet";
 import { TYPE_ICON_PATHS } from "./TypeIcon.jsx";
 import { createPolygonDraftGeometry, insertPolygonVertex } from "../services/geojson.js";
+import { applyLeafletVisualMode, getVisualModeCapabilities } from "../services/visualMode.js";
 
 const MAX_ZOOM = 19;
 const padding = L.point(12, 12);
@@ -234,6 +235,7 @@ export default function MapView({
     editGeometry,
     onEditGeometryChange,
     readOnly = false,
+    visualMode = "normal",
 }) {
     const containerRef = useRef(null);
     const mapRef = useRef(null);
@@ -244,6 +246,7 @@ export default function MapView({
     drawCoordinatesRef.current = drawCoordinates;
     interactionRef.current = { areaDrawing, lineDrawing };
     callbacksRef.current = { onMapClick, onSelect, onCloseArea, onFinishLine, onEditGeometryChange, onRoadStatus };
+    const visualCapabilities = getVisualModeCapabilities(visualMode);
 
     useEffect(() => {
         if (!bounds || !containerRef.current || mapRef.current)
@@ -392,6 +395,13 @@ export default function MapView({
         layerControl.removeLayer(placesLayer);
         layerControl.addOverlay(placesLayer, readOnly ? "快照地点（只读）" : "用户地点");
     }, [readOnly]);
+
+    useEffect(() => {
+        const map = mapRef.current;
+        const { roads, layerControl } = layersRef.current ?? {};
+        if (!map || !containerRef.current) return;
+        applyLeafletVisualMode({ map, container: containerRef.current, roads, layerControl }, visualCapabilities.mode);
+    }, [visualCapabilities.mode]);
 
     useEffect(() => {
         const map = mapRef.current;
@@ -676,6 +686,7 @@ export default function MapView({
         <div
             ref={containerRef}
             id="map"
+            className="map-view"
             role="application"
             aria-label={readOnly ? `${mapName}公开快照只读地图` : `${mapName}交互地图`}
         />

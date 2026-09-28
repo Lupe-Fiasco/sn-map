@@ -87,22 +87,48 @@ test("睢宁实际道路文件可从配置路径解析并投影 LineString/Multi
   assert.ok(paths.every((path) => path.points.length >= 2 && ["major", "primary", "local"].includes(path.kind)));
 });
 
-test("道路和用户 LineString 生成有宽度且朝上的可渲染带状三角形", () => {
+test("道路和用户 LineString 生成有宽度、朝上顶面和非零厚度的带状实体", () => {
   const road = { id: "base-1", kind: "primary", points: [[0, 0], [3, 0]] };
   const userLine = { id: "user-1", kind: "road", points: [[0, 0], [0, 4]] };
-  const roadData = createRibbonGeometryData([road], "primary", 0.46, 0.055);
-  const userData = createRibbonGeometryData([userLine], "road", 0.24, 0.1);
+  const roadData = createRibbonGeometryData([road], "primary", 0.46, 0.075, 0.05);
+  const userData = createRibbonGeometryData([userLine], "road", 0.24, 0.12, 0.065);
   const triangleNormalY = (positions) => {
     const [ax, , az, bx, , bz, cx, , cz] = positions;
     return (bz - az) * (cx - ax) - (bx - ax) * (cz - az);
   };
+  const triangleNormal = (positions, offset) => {
+    const [ax, ay, az, bx, by, bz, cx, cy, cz] = positions.slice(offset, offset + 9);
+    const ab = [bx - ax, by - ay, bz - az];
+    const ac = [cx - ax, cy - ay, cz - az];
+    return [ab[1] * ac[2] - ab[2] * ac[1], ab[2] * ac[0] - ab[0] * ac[2], ab[0] * ac[1] - ab[1] * ac[0]];
+  };
 
-  assert.equal(roadData.positions.length, 18);
-  assert.equal(userData.positions.length, 18);
+  assert.equal(roadData.positions.length, 108);
+  assert.equal(userData.positions.length, 108);
+  assert.equal(roadData.hits.length, 12);
+  assert.equal(userData.hits.length, 12);
   assert.equal(roadData.hits[0], road);
   assert.equal(userData.hits[0], userLine);
   assert.ok(triangleNormalY(roadData.positions) > 0);
   assert.ok(triangleNormalY(userData.positions) > 0);
+  const roadHeights = [...new Set(roadData.positions.filter((_, index) => index % 3 === 1))].sort();
+  const userHeights = [...new Set(userData.positions.filter((_, index) => index % 3 === 1))].sort();
+  assert.ok(Math.abs(roadHeights[0] - 0.025) < 1e-12 && roadHeights[1] === 0.075);
+  assert.ok(Math.abs(userHeights[0] - 0.055) < 1e-12 && userHeights[1] === 0.12);
+  assert.equal(Math.max(...roadData.positions.filter((_, index) => index % 3 === 2)) - Math.min(...roadData.positions.filter((_, index) => index % 3 === 2)), 0.46);
+  const sideNormal = triangleNormal(roadData.positions, 36);
+  assert.ok(Math.hypot(...sideNormal) > 0);
+  assert.ok(Math.abs(sideNormal[1]) < 1e-12);
+});
+
+test("带状实体跳过退化线段，且无效厚度不会生成不可见平面", () => {
+  const path = { id: "mixed", kind: "local", points: [[0, 0], [0, 0], [2, 0]] };
+  const valid = createRibbonGeometryData([path], "local", 0.28, 0.075, 0.05);
+
+  assert.equal(valid.positions.length, 108);
+  assert.equal(valid.hits.length, 12);
+  assert.deepEqual(createRibbonGeometryData([path], "local", 0.28, 0.075, 0).positions, []);
+  assert.deepEqual(createRibbonGeometryData([path], "local", 0.28, 0.04, 0.05).positions, []);
 });
 
 test("程序化建筑避让用户 Point、LineString 与 Polygon", () => {

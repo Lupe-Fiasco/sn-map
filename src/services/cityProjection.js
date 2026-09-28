@@ -42,33 +42,48 @@ function roadKind(feature) {
   return "local";
 }
 
-export function createRibbonGeometryData(paths, kind, width, elevation) {
+export function createRibbonGeometryData(paths, kind, width, elevation, thickness) {
   const positions = [];
   const hits = [];
   const halfWidth = width / 2;
-  if (!Number.isFinite(halfWidth) || halfWidth <= 0) return { positions, hits };
+  const bottomElevation = elevation - thickness;
+  if (![halfWidth, elevation, thickness, bottomElevation].every(Number.isFinite) || halfWidth <= 0 || thickness <= 0 || bottomElevation < 0) {
+    return { positions, hits };
+  }
 
-  // ai coding：三角形统一朝上绕序并保留每个面的来源；避免水平道路被默认背面剔除而完全不可见。
+  // ai coding：道路由单一水平面改为带顶面、底面和四侧面的薄实体；顶面朝上，侧面保证斜视时仍有可见投影，同时不关闭深度测试。
   paths.forEach((path) => {
     if (kind && path.kind !== kind) return;
     path.points.forEach((end, index) => {
       if (!index) return;
       const start = path.points[index - 1];
+      if (![...start, ...end].every(Number.isFinite)) return;
       const dx = end[0] - start[0];
       const dz = end[1] - start[1];
       const length = Math.hypot(dx, dz);
       if (!length) return;
       const nx = (-dz / length) * halfWidth;
       const nz = (dx / length) * halfWidth;
-      positions.push(
-        start[0] + nx, elevation, start[1] + nz,
-        end[0] + nx, elevation, end[1] + nz,
-        start[0] - nx, elevation, start[1] - nz,
-        end[0] + nx, elevation, end[1] + nz,
-        end[0] - nx, elevation, end[1] - nz,
-        start[0] - nx, elevation, start[1] - nz,
-      );
-      hits.push(path, path);
+      const startLeft = [start[0] + nx, elevation, start[1] + nz];
+      const endLeft = [end[0] + nx, elevation, end[1] + nz];
+      const startRight = [start[0] - nx, elevation, start[1] - nz];
+      const endRight = [end[0] - nx, elevation, end[1] - nz];
+      const startLeftBottom = [startLeft[0], bottomElevation, startLeft[2]];
+      const endLeftBottom = [endLeft[0], bottomElevation, endLeft[2]];
+      const startRightBottom = [startRight[0], bottomElevation, startRight[2]];
+      const endRightBottom = [endRight[0], bottomElevation, endRight[2]];
+      const triangles = [
+        [startLeft, endLeft, startRight], [endLeft, endRight, startRight],
+        [startLeftBottom, startRightBottom, endLeftBottom], [endLeftBottom, startRightBottom, endRightBottom],
+        [startLeft, startLeftBottom, endLeft], [endLeft, startLeftBottom, endLeftBottom],
+        [startRight, endRight, startRightBottom], [endRight, endRightBottom, startRightBottom],
+        [startLeft, startRight, startLeftBottom], [startRight, startRightBottom, startLeftBottom],
+        [endLeft, endLeftBottom, endRight], [endRight, endLeftBottom, endRightBottom],
+      ];
+      triangles.forEach((triangle) => {
+        positions.push(...triangle.flat());
+        hits.push(path);
+      });
     });
   });
   return { positions, hits };

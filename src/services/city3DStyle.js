@@ -19,15 +19,16 @@ const PLACE_PROFILES = Object.freeze({
 
 export const CITY_3D_STYLE = Object.freeze({
   baseRoads: Object.freeze({
-    major: Object.freeze({ color: "#697176", width: 0.62 }),
-    primary: Object.freeze({ color: "#858d91", width: 0.46 }),
-    local: Object.freeze({ color: "#a4aaac", width: 0.28 }),
+    major: Object.freeze({ color: "#697176", width: 0.62, elevation: 0.075, thickness: 0.05 }),
+    primary: Object.freeze({ color: "#858d91", width: 0.46, elevation: 0.075, thickness: 0.05 }),
+    local: Object.freeze({ color: "#a4aaac", width: 0.28, elevation: 0.075, thickness: 0.05 }),
   }),
   userLines: Object.freeze({
-    road: Object.freeze({ color: "#727b80", visibleWidth: 0.24, hitWidth: 0.5, elevation: 0.1 }),
-    water: Object.freeze({ color: "#3189bd", visibleWidth: 0.3, hitWidth: 0.54, elevation: 0.095 }),
+    road: Object.freeze({ color: "#d88a1d", highlightColor: "#fff0a6", visibleWidth: 0.24, highlightWidth: 0.38, hitWidth: 0.5, elevation: 0.12, thickness: 0.065 }),
+    water: Object.freeze({ color: "#3189bd", highlightColor: "#bcecff", visibleWidth: 0.3, highlightWidth: 0.44, hitWidth: 0.54, elevation: 0.115, thickness: 0.06 }),
   }),
-  polygon: Object.freeze({ elevation: 0.075, opacity: 0.2 }),
+  polygon: Object.freeze({ elevation: 0.075, opacity: 0.2, highlightColor: "#fff1a8", highlightWidth: 0.16, highlightThickness: 0.035 }),
+  pointHighlight: Object.freeze({ color: "#fff1a8", lineWidth: 2.4 }),
 });
 
 function classificationParts(values) {

@@ -9,6 +9,7 @@ import SnapshotCard from "./components/SnapshotCard.jsx";
 import SharePage from "./components/SharePage.jsx";
 import ApprovalGate from "./components/ApprovalGate.jsx";
 import AdminPanel from "./components/AdminPanel.jsx";
+import AppHeader from "./components/AppHeader.jsx";
 import FormErrorBoundary from "./components/FormErrorBoundary.jsx";
 import City3DErrorBoundary from "./components/City3DErrorBoundary.jsx";
 import { usePlaces } from "./hooks/usePlaces.js";
@@ -16,6 +17,8 @@ import { useAuth } from "./hooks/useAuth.js";
 import { resolveAppRoute } from "./services/approval.js";
 import { loadMapConfigs, resolveMapViewConfig } from "./services/maps.js";
 import { finishAreaDrawing, finishLineDrawing } from "./services/lineDrawing.js";
+import { getCreateActionPresentation, runCreateAction } from "./services/mapEditing.js";
+import { applyVisualModeTheme, persistVisualMode, readVisualMode } from "./services/visualMode.js";
 import {
     getCity3DImportAttempt,
     hasNextCity3DImportAttempt,
@@ -68,6 +71,7 @@ function ApprovedManagementApp({ auth }) {
     const bounds = viewConfig?.bounds ?? null;
     const [mode, setMode] = useState("browse");
     const [viewMode, setViewMode] = useState("2d");
+    const [visualMode, setVisualMode] = useState(readVisualMode);
     const [city3DImportIndex, setCity3DImportIndex] = useState(0);
     const city3DImportAttempt = getCity3DImportAttempt(city3DImportIndex);
     // ai coding：重试索引改变时同时更换 lazy 类型和静态 query importer，确保发起全新的模块请求。
@@ -93,6 +97,11 @@ function ApprovedManagementApp({ auth }) {
     const syncRunRef = useRef(0);
     const syncingRef = useRef(false);
     const busy = syncing || cloud.saving || auth.status.loading || (auth.configured && !auth.session);
+    const createActionsDisabled = !bounds || placeLoad.loading || busy;
+    const createActionProps = (active) => getCreateActionPresentation(viewMode, createActionsDisabled, active);
+    const userLabel = auth.session?.user?.is_anonymous
+        ? "匿名会话"
+        : auth.session?.user?.email || "用户账号";
     const selected = useMemo(
         () => places.features.find((item) => item.id === selectedId) ?? null,
         [places, selectedId],
@@ -104,6 +113,11 @@ function ApprovedManagementApp({ auth }) {
     );
 
     const notify = useCallback((message) => setToast(message), []);
+    useEffect(() => {
+        // ai coding：视觉偏好独立于 owner/map 数据持久化，并在根节点提供轻量主题选择器。
+        const nextMode = persistVisualMode(visualMode);
+        applyVisualModeTheme(nextMode);
+    }, [visualMode]);
     useEffect(() => {
         if (!toast) return undefined;
         const timer = setTimeout(() => setToast(""), 3200);
@@ -401,29 +415,17 @@ function ApprovedManagementApp({ auth }) {
 
     return (
         <>
-            <header className="site-header">
-                <div>
-                    <p className="eyebrow">SN MAP / 多地区</p>
-                    <h1>{mapConfig?.name || "地区地图"}数据</h1>
-                    <p className="intro">
-                        在只读的 OpenStreetMap
-                        道路底图上，维护独立的用户地点数据。
-                    </p>
-                </div>
-                <div className="header-tools">
-                    <label className="map-selector">当前地图
-                        <select value={mapId} onChange={(event) => setMapId(event.target.value)} disabled={!maps.length || busy}>
-                            {maps.map((item) => <option key={item.id} value={item.id}>{item.name}{item.is_active === false ? "（停用）" : ""}</option>)}
-                        </select>
-                        <small>{mapConfig ? `已选择 · ${mapConfig.name}` : "正在加载地区配置…"}</small>
-                    </label>
-                </div>
-            </header>
-            {/* ai coding：账号与管理员能力独立置顶，地图工作区侧栏不再因管理员卡片而下移。 */}
-            <div className={`top-card-row ${auth.access.isAdmin ? "has-admin" : ""}`}>
-                <AuthCard session={auth.session} auth={auth} placeCount={places.features.length} onExport={exportPlaces} />
-                {auth.access.isAdmin && <AdminPanel key={auth.access.ownerId} ownerId={auth.access.ownerId} />}
-            </div>
+            {/* ai coding：保留用户改造后的 Header 品牌/账号结构，只增量接入独立视觉设置。 */}
+            <AppHeader
+                key={auth.access.ownerId || auth.session?.user?.id || "account"}
+                mapName={mapConfig?.name}
+                userLabel={userLabel}
+                isAdmin={auth.access.isAdmin}
+                accountContent={<AuthCard session={auth.session} auth={auth} placeCount={places.features.length} onExport={exportPlaces} />}
+                adminContent={auth.access.isAdmin ? <AdminPanel key={auth.access.ownerId} ownerId={auth.access.ownerId} /> : null}
+                visualMode={visualMode}
+                onVisualModeChange={setVisualMode}
+            />
             <main ref={workspaceRef} className="management-workspace">
                 {/* ai coding：公开快照跟随地图主列排列，避免继续占用地点维护侧栏。 */}
                 <div className="map-column">
@@ -439,12 +441,9 @@ function ApprovedManagementApp({ auth }) {
                         </div>
                         <div className="map-actions">
                             <button
-                                className={`button ${mode === "adding" ? "" : "primary"}`}
                                 type="button"
-                                disabled={
-                                    !bounds || placeLoad.loading || busy
-                                }
-                                onClick={toggleAdding}
+                                {...createActionProps(mode === "adding")}
+                                onClick={() => runCreateAction(viewMode, notify, toggleAdding)}
                                 aria-pressed={mode === "adding"}
                             >
                                 {mode === "adding"
@@ -452,19 +451,17 @@ function ApprovedManagementApp({ auth }) {
                                     : "＋ 新增地点"}
                             </button>
                             <button
-                                className={`button ${mode === "drawing-line" ? "" : "primary"}`}
                                 type="button"
-                                disabled={!bounds || placeLoad.loading || busy}
-                                onClick={toggleLineDrawing}
+                                {...createActionProps(mode === "drawing-line")}
+                                onClick={() => runCreateAction(viewMode, notify, toggleLineDrawing)}
                                 aria-pressed={mode === "drawing-line"}
                             >
                                 {mode === "drawing-line" ? "退出线绘制" : "⌁ 新增线"}
                             </button>
                             <button
-                                className={`button ${mode === "drawing-area" ? "" : "primary"}`}
                                 type="button"
-                                disabled={!bounds || placeLoad.loading || busy}
-                                onClick={toggleAreaDrawing}
+                                {...createActionProps(mode === "drawing-area")}
+                                onClick={() => runCreateAction(viewMode, notify, toggleAreaDrawing)}
                                 aria-pressed={mode === "drawing-area"}
                             >
                                 {mode === "drawing-area" ? "退出区域绘制" : "▱ 新增区域"}
@@ -505,6 +502,7 @@ function ApprovedManagementApp({ auth }) {
                             editingFeature={mode === "editing" && editGeometry ? selected : null}
                             editGeometry={editGeometry}
                             onEditGeometryChange={setEditGeometry}
+                            visualMode={visualMode}
                         />
                     ) : bounds ? (
                         // ai coding：边界包住 Suspense 与 lazy 组件，既保留加载反馈，也隔离导入及 3D 渲染异常。
@@ -521,7 +519,9 @@ function ApprovedManagementApp({ auth }) {
                                     bounds={bounds}
                                     baseRoadsPath={viewConfig.baseRoadsPath}
                                     places={places}
+                                    onSelect={selectPlace}
                                     onRoadStatus={roadStatus}
+                                    visualMode={visualMode}
                                 />
                             </Suspense>
                         </City3DErrorBoundary>
@@ -535,6 +535,16 @@ function ApprovedManagementApp({ auth }) {
                     <SnapshotCard key={`${auth.session?.user?.id ?? "no-owner"}:${mapId}`} ownerId={auth.session?.user?.id} mapId={mapId} mapName={mapConfig?.name} imagesEnabled={!auth.session?.user?.is_anonymous && (auth.access.state === "approved" || auth.access.isAdmin)} places={places} cloud={cloud} />
                 </div>
                 <aside className="info-panel" aria-label="地点维护面板">
+                    {/* ai coding：地图选择移至用户地点操作区之前，切换逻辑和禁用条件保持不变。 */}
+                    <section className="map-selection-card" aria-labelledby="map-selection-title">
+                        <label className="map-selector" htmlFor="management-map-select">
+                            <span id="map-selection-title">选择地图</span>
+                            <select id="management-map-select" value={mapId} onChange={(event) => setMapId(event.target.value)} disabled={!maps.length || busy}>
+                                {maps.map((item) => <option key={item.id} value={item.id}>{item.name}{item.is_active === false ? "（停用）" : ""}</option>)}
+                            </select>
+                            <small>{mapConfig?.name ? `当前 · ${mapConfig.name}` : "正在加载地区配置…"}</small>
+                        </label>
+                    </section>
                     <section
                         className="place-card"
                         aria-labelledby="places-title"

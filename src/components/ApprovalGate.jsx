@@ -5,7 +5,7 @@ export default function ApprovalGate({ auth }) {
     const loading = auth.access.loading || auth.access.ownerId !== auth.session?.user?.id;
     const rejected = state === "rejected";
     return (
-        <>
+        <div className="approval-page">
             <header className="site-header approval-header">
                 <div><p className="eyebrow">SN MAP / 账号审核</p><h1>睢宁地图数据</h1></div>
             </header>
@@ -22,6 +22,6 @@ export default function ApprovalGate({ auth }) {
                 </section>
             </main>
             <footer><span>SN MAP · React 地图</span><span>账号权限由数据库审核策略保护</span></footer>
-        </>
+        </div>
     );
 }

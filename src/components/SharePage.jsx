@@ -4,6 +4,8 @@ import PublicImageGallery from "./PublicImageGallery.jsx";
 import { fetchPublicSnapshot, publicPlaceDetails } from "../services/mapSnapshots.js";
 import { supabase, supabaseConfiguration } from "../services/supabaseClient.js";
 import { validateMapConfig } from "../services/maps.js";
+import { applyVisualModeTheme, readVisualMode, subscribeVisualMode } from "../services/visualMode.js";
+import { createPublicMapViewProps } from "../services/publicMapView.js";
 
 async function getJson(url) {
     const response = await fetch(url);
@@ -16,6 +18,12 @@ export default function SharePage({ token }) {
     const [selectedId, setSelectedId] = useState(null);
     const [roadError, setRoadError] = useState("");
     const [reloadKey, setReloadKey] = useState(0);
+    const [visualMode, setVisualMode] = useState(readVisualMode);
+    useEffect(() => subscribeVisualMode((nextMode) => {
+        // ai coding：公开快照只订阅视觉偏好并同步根主题，保持只读且不会初始化匿名登录。
+        setVisualMode(nextMode);
+        applyVisualModeTheme(nextMode);
+    }), []);
     useEffect(() => {
         let active = true;
         (async () => {
@@ -40,7 +48,7 @@ export default function SharePage({ token }) {
         <header className="site-header public-header"><div><p className="eyebrow">SN MAP / {data.map?.name || "公开快照"}</p><h1>{data.row?.title || "公开地图"}</h1><p className="intro">无需登录的只读地图。快照仅反映发布时的数据。</p></div><a className="button" href={window.location.pathname}>返回管理端</a></header>
         {data.loading ? <main className="share-message" role="status">正在加载公开快照与图片…</main> : data.error ? <main className="share-message error" role="alert"><h2>无法打开公开地图</h2><p>{data.error}</p><button className="button" type="button" onClick={() => { setData((current) => ({ ...current, loading: true, error: "" })); setReloadKey((value) => value + 1); }}>重试</button></main> : (
             <main className="public-main">
-                <section className="map-panel" aria-labelledby="public-map-title"><div className="panel-heading"><div><p className="section-label">{data.map.name} · 只读地图</p><h2 id="public-map-title">{data.row.snapshot.features.length} 个地点与区域</h2></div><span className="publish-badge public">PUBLIC</span></div>{roadError && <p className="map-error" role="alert">{roadError}</p>}<MapView mapId={data.map.id} bounds={data.bounds} mapName={data.map.name} baseRoadsPath={data.map.base_roads_path} places={data.row.snapshot} types={data.types} selectedId={selectedId} onSelect={setSelectedId} onRoadStatus={roadStatus} readOnly /></section>
+                <section className="map-panel" aria-labelledby="public-map-title"><div className="panel-heading"><div><p className="section-label">{data.map.name} · 只读地图</p><h2 id="public-map-title">{data.row.snapshot.features.length} 个地点与区域</h2></div><span className="publish-badge public">PUBLIC</span></div>{roadError && <p className="map-error" role="alert">{roadError}</p>}<MapView {...createPublicMapViewProps(data, selectedId, setSelectedId, roadStatus, visualMode)} /></section>
                 <aside className="info-panel"><section className="place-card"><p className="section-label">快照地点</p><h2>地点列表</h2>{details && <div className="public-details" aria-live="polite"><h3>{details.name}</h3><dl>{[["类型", details.type], ["经纬度", details.coordinates], ["备注", details.description || details.notes], ["地址", details.address], ["电话", details.phone], ["网站", details.website], ["开放时间", details.opening_hours]].map(([label, value]) => value ? <div key={label}><dt>{label}</dt><dd>{value}</dd></div> : null)}</dl><PublicImageGallery images={details.images} placeName={details.name} /></div>}<ul className="place-list public-place-list">{data.row.snapshot.features.map((feature) => <li key={feature.id}><button type="button" onClick={() => setSelectedId(feature.id)} aria-pressed={selectedId === feature.id}><span className="type-swatch" style={{ background: data.types.find((type) => type.id === feature.properties.type)?.color || "#65736f" }} /><span className="place-name">{feature.properties.name}</span><span className="place-type">{feature.geometry.type === "Polygon" ? "区域" : feature.geometry.type === "LineString" ? "线" : "点"}</span></button></li>)}</ul>{!data.row.snapshot.features.length && <p className="empty-state">该快照没有地点。</p>}<p className="file-status">最后发布：{new Date(data.row.published_at).toLocaleString("zh-CN")}</p></section></aside>
             </main>
         )}
