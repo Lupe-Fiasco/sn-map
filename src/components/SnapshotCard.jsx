@@ -19,6 +19,7 @@ import {
     updateOwnerGeneration,
 } from "../services/ownerGeneration.js";
 import { supabase } from "../services/supabaseClient.js";
+import { ui } from "../uiClassNames.js";
 
 const PRESET_OPTIONS = [
     ["basic", SNAPSHOT_LEVEL_LABELS.basic, "地图位置或区域形状、名称、类型和代表经纬度"],
@@ -216,9 +217,9 @@ export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, p
     const needsRepublish = snapshotNeedsRepublish(currentSnapshot?.snapshot);
     const imagesUnavailable = preset === "images" && (!imagesEnabled || imageCount === null || imageCount === 0);
     return (
-        <section className="snapshot-card" aria-labelledby="snapshot-title">
-            <p className="section-label">公开只读快照</p>
-            <div className="snapshot-heading">
+        <section className={`${ui.card} p-5`} aria-labelledby="snapshot-title">
+            <p className={ui.eyebrow}>公开只读快照</p>
+            <div className={`${ui.sectionHeading} mb-3`}>
                 <h2 id="snapshot-title">
                     {currentSnapshot?.is_public ? "已公开" : "未公开"}
                 </h2>
@@ -228,15 +229,16 @@ export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, p
                     {currentSnapshot?.is_public ? "PUBLIC" : "PRIVATE"}
                 </span>
             </div>
-            {currentSnapshot?.is_public && <p className="snapshot-current-level">当前公开级别：<b>{SNAPSHOT_LEVEL_LABELS[publishedLevel]}</b></p>}
+            {currentSnapshot?.is_public && <p className={`snapshot-current-level ${ui.themeMuted}`}>当前公开级别：<b>{SNAPSHOT_LEVEL_LABELS[publishedLevel]}</b></p>}
             {snapshotLoading ? (
-                <p className="file-status" role="status">正在读取当前账号的公开快照…</p>
+                <p className={`${ui.muted} mt-[14px]`} role="status">正在读取当前账号的公开快照…</p>
             ) : !currentSnapshot ? (
-                <p className="file-status">当前账号尚无公开快照；首次发布默认使用基础级别。</p>
+                <p className={`${ui.muted} mt-[14px]`}>当前账号尚无公开快照；首次发布默认使用基础级别。</p>
             ) : null}
-            <label className="snapshot-label">
+            <label className={ui.label}>
                 地图标题
                 <input
+                    className={`${ui.input} mt-1`}
                     maxLength="120"
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
@@ -244,19 +246,19 @@ export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, p
                 />
             </label>
             <fieldset className="snapshot-options" disabled={busy}>
-                <legend>公开展示级别</legend>
+                <legend className={ui.themeLabel}>公开展示级别</legend>
                 <div className="snapshot-presets">
                     {PRESET_OPTIONS.map(([value, label, help]) => (
-                        <label key={value} className={value === "images" && (!imagesEnabled || !(imageCount > 0)) ? "disabled" : ""}>
+                        <label key={value} className={`flex gap-[7px] rounded-[7px] border border-[#dbe3dd] p-[9px] has-[:checked]:border-[#69a18e] has-[:checked]:bg-[#edf7f2] cyber:border-[#31536b] cyber:has-[:checked]:border-[#68edff] cyber:has-[:checked]:bg-[rgba(25,91,111,.42)] ${value === "images" && (!imagesEnabled || !(imageCount > 0)) ? "cursor-not-allowed opacity-55" : "cursor-pointer"}`}>
                             <input type="radio" name="snapshot-preset" checked={preset === value} disabled={value === "images" && (!imagesEnabled || !(imageCount > 0))} onChange={() => setPreset(value)} />
-                            <span><b>{label}</b><small>{help}</small></span>
+                            <span><b>{label}</b><small className={ui.themeMuted}>{help}</small></span>
                         </label>
                     ))}
                 </div>
-                <p className="form-help">三个级别均固定公开名称、类型、代表经纬度和 Point 位置或 Polygon 完整形状。{imagesEnabled ? (imageCountError ? "图片数量暂不可用。" : imageCount === null ? "正在读取实景图片数量…" : imageCount ? `当前正式地点共 ${imageCount} 张图片；级别 3 会重新编码并移除元数据。` : "当前没有可公开的实景图片，级别 3 暂不可选。") : "实景图片仅限已批准正式账号或管理员公开。"}</p>
-                {imageCountError && <div className="image-count-error" role="alert"><span>{imageCountError}</span><button className="button" type="button" onClick={() => setImageCountReload((value) => value + 1)}>重试</button></div>}
+                <p className={`${ui.muted} mt-[14px]`}>三个级别均固定公开名称、类型、代表经纬度和 Point 位置或 Polygon 完整形状。{imagesEnabled ? (imageCountError ? "图片数量暂不可用。" : imageCount === null ? "正在读取实景图片数量…" : imageCount ? `当前正式地点共 ${imageCount} 张图片；级别 3 会重新编码并移除元数据。` : "当前没有可公开的实景图片，级别 3 暂不可选。") : "实景图片仅限已批准正式账号或管理员公开。"}</p>
+                {imageCountError && <div className="image-count-error" role="alert"><span>{imageCountError}</span><button className={ui.button} type="button" onClick={() => setImageCountReload((value) => value + 1)}>重试</button></div>}
             </fieldset>
-            <p className="file-status">
+            <p className={`${ui.muted} mt-[14px] break-words`}>
                 发布会复制此刻的正式地点集合；待定点、编辑草稿及 localStorage
                 草稿不会进入快照，后续编辑也不会自动更新。
             </p>
@@ -270,18 +272,19 @@ export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, p
                 </p>
             )}
             {currentSnapshot?.is_public && (
-                <label className="snapshot-label">
+                <label className={ui.label}>
                     分享链接
                     <input
+                        className={`${ui.input} mt-1`}
                         readOnly
                         value={link}
                         onFocus={(event) => event.target.select()}
                     />
                 </label>
             )}
-            <div className="data-actions">
+            <div className="mt-[14px] grid grid-cols-2 gap-2">
                 <button
-                    className="button primary"
+                    className={`${ui.button} ${ui.primaryButton}`}
                     type="button"
                     disabled={busy || unavailable || imagesUnavailable}
                     onClick={publish}
@@ -294,7 +297,7 @@ export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, p
                 </button>
                 {currentSnapshot?.is_public ? (
                     <button
-                        className="button"
+                        className={ui.button}
                         type="button"
                         disabled={busy}
                         onClick={copy}
@@ -307,7 +310,7 @@ export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, p
             </div>
             {currentSnapshot?.is_public && (
                 <button
-                    className="button danger-text snapshot-unpublish"
+                    className={`${ui.button} ${ui.dangerButton} mt-2 w-full`}
                     type="button"
                     disabled={busy}
                     onClick={cancel}
@@ -316,15 +319,15 @@ export default function SnapshotCard({ ownerId, mapId, mapName, imagesEnabled, p
                 </button>
             )}
             {unavailable && (
-                <p className="file-status">需先连接云端后才能发布。</p>
+                <p className={`${ui.muted} mt-[14px]`}>需先连接云端后才能发布。</p>
             )}
             {status && (
-                <p className="file-status" role="status">
+                <p className={`${ui.muted} mt-[14px] break-words`} role="status">
                     {status}
                 </p>
             )}
             {error && (
-                <p className="form-error" role="alert">
+                <p className={ui.error} role="alert">
                     {error}
                 </p>
             )}

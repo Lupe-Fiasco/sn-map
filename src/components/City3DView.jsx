@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Canvas, useFrame } from "@react-three/fiber";
 import { Edges, MapControls } from "@react-three/drei";
 import * as THREE from "three";
+import { ui } from "../uiClassNames.js";
 import { createLocalProjection, createProceduralBuildings, createRibbonGeometryData, projectRoadPaths, projectUserPlaces } from "../services/cityProjection.js";
 import { CITY_3D_STYLE, classifyLinearPlace, classifyPlaceBuilding, getCity3DCameraConfig } from "../services/city3DStyle.js";
 import { createPlaceHoverStrategy, createPointPlaceBuildings, createPolygonPlaceBuildings } from "../services/city3DPlaces.js";
@@ -376,9 +377,9 @@ export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, plac
       <span>{loadState.error}</span>
       {/* ai coding：公开页可安全降级到仍在内存中的只读 2D 快照；管理端缺省时保持原重试入口。 */}
       {onFallbackTo2D ? <div className="city3d-actions">
-        <button className="button primary" type="button" onClick={onFallbackTo2D}>返回 2D 地图</button>
-        <button className="button" type="button" onClick={() => setRetry((value) => value + 1)}>重新加载</button>
-      </div> : <button className="button" type="button" onClick={() => setRetry((value) => value + 1)}>重新加载</button>}
+        <button className={`${ui.button} ${ui.primaryButton}`} type="button" onClick={onFallbackTo2D}>返回 2D 地图</button>
+        <button className={ui.button} type="button" onClick={() => setRetry((value) => value + 1)}>重新加载</button>
+      </div> : <button className={ui.button} type="button" onClick={() => setRetry((value) => value + 1)}>重新加载</button>}
     </div>
   );
 

@@ -12,6 +12,7 @@ import AdminPanel from "./components/AdminPanel.jsx";
 import AppHeader from "./components/AppHeader.jsx";
 import FormErrorBoundary from "./components/FormErrorBoundary.jsx";
 import City3DErrorBoundary from "./components/City3DErrorBoundary.jsx";
+import MapSelectionCard from "./components/MapSelectionCard.jsx";
 import { usePlaces } from "./hooks/usePlaces.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { resolveAppRoute } from "./services/approval.js";
@@ -19,6 +20,7 @@ import { loadMapConfigs, resolveMapViewConfig } from "./services/maps.js";
 import { finishAreaDrawing, finishLineDrawing } from "./services/lineDrawing.js";
 import { getCreateActionPresentation, runCreateAction } from "./services/mapEditing.js";
 import { applyVisualModeTheme, persistVisualMode, readVisualMode } from "./services/visualMode.js";
+import { ui } from "./uiClassNames.js";
 import {
     getCity3DImportAttempt,
     hasNextCity3DImportAttempt,
@@ -429,17 +431,17 @@ function ApprovedManagementApp({ auth }) {
             <main ref={workspaceRef} className="management-workspace">
                 {/* ai coding：公开快照跟随地图主列排列，避免继续占用地点维护侧栏。 */}
                 <div className="map-column">
-                <section ref={mapPanelRef} className="map-panel" aria-labelledby="map-title">
+                <section ref={mapPanelRef} className={`map-panel ${ui.card} ${ui.mapCard}`} aria-labelledby="map-title">
                     <div ref={mapHeaderRef} className="map-header">
-                    <div className="panel-heading">
+                    <div className={ui.panelHeading}>
                         <h2 id="map-title">{viewMode === "2d" ? "地图视图" : "3D 城市视图"}</h2>
-                        <div className="map-heading-tools">
+                        <div className="flex min-w-0 items-center justify-end gap-3 max-[1100px]:flex-wrap max-[1100px]:items-start">
                         {/* ai coding：主内容区原位切换渲染器，Leaflet 与 Three.js 不形成嵌套层叠上下文。 */}
-                        <div className="view-switch" role="group" aria-label="地图视图模式">
-                            <button type="button" className={viewMode === "2d" ? "active" : ""} aria-pressed={viewMode === "2d"} onClick={() => setViewMode("2d")}>2D 地图</button>
-                            <button type="button" className={viewMode === "3d" ? "active" : ""} aria-pressed={viewMode === "3d"} onClick={() => setViewMode("3d")} disabled={!bounds || !["browse", "details"].includes(mode)} title={!["browse", "details"].includes(mode) ? "请先完成或取消当前地图操作" : undefined}>3D 城市</button>
+                        <div className={ui.viewSwitch} role="group" aria-label="地图视图模式">
+                            <button type="button" className={`${ui.viewSwitchButton} ${viewMode === "2d" ? ui.viewSwitchActive : ""}`} aria-pressed={viewMode === "2d"} onClick={() => setViewMode("2d")}>2D 地图</button>
+                            <button type="button" className={`${ui.viewSwitchButton} ${viewMode === "3d" ? ui.viewSwitchActive : ""}`} aria-pressed={viewMode === "3d"} onClick={() => setViewMode("3d")} disabled={!bounds || !["browse", "details"].includes(mode)} title={!["browse", "details"].includes(mode) ? "请先完成或取消当前地图操作" : undefined}>3D 城市</button>
                         </div>
-                        <div className="map-actions">
+                        <div className="flex items-center gap-2">
                             <button
                                 type="button"
                                 {...createActionProps(mode === "adding")}
@@ -534,53 +536,45 @@ function ApprovedManagementApp({ auth }) {
                     {/* ai coding：owner 切换时同步重建卡片，首帧不复用上一账号的本地 UI 状态。 */}
                     <SnapshotCard key={`${auth.session?.user?.id ?? "no-owner"}:${mapId}`} ownerId={auth.session?.user?.id} mapId={mapId} mapName={mapConfig?.name} imagesEnabled={!auth.session?.user?.is_anonymous && (auth.access.state === "approved" || auth.access.isAdmin)} places={places} cloud={cloud} />
                 </div>
-                <aside className="info-panel" aria-label="地点维护面板">
+                <aside className={ui.infoPanel} aria-label="地点维护面板">
                     {/* ai coding：地图选择移至用户地点操作区之前，切换逻辑和禁用条件保持不变。 */}
-                    <section className="map-selection-card" aria-labelledby="map-selection-title">
-                        <label className="map-selector" htmlFor="management-map-select">
-                            <span id="map-selection-title">选择地图</span>
-                            <select id="management-map-select" value={mapId} onChange={(event) => setMapId(event.target.value)} disabled={!maps.length || busy}>
-                                {maps.map((item) => <option key={item.id} value={item.id}>{item.name}{item.is_active === false ? "（停用）" : ""}</option>)}
-                            </select>
-                            <small>{mapConfig?.name ? `当前 · ${mapConfig.name}` : "正在加载地区配置…"}</small>
-                        </label>
-                    </section>
+                    <MapSelectionCard maps={maps} mapId={mapId} mapName={mapConfig?.name} disabled={!maps.length || busy} onChange={(event) => setMapId(event.target.value)} />
                     <section
-                        className="place-card"
+                        className={`${ui.card} relative z-[2] overflow-visible p-5`}
                         aria-labelledby="places-title"
                     >
-                        <div className="section-heading">
+                        <div className={ui.sectionHeading}>
                             <div>
-                                <p className="section-label">用户地点</p>
+                                <p className={ui.eyebrow}>用户地点</p>
                                 <h2 id="places-title">地点列表</h2>
                             </div>
-                            <span className="count-badge">
+                            <span className="min-w-[26px] rounded-full bg-[#e4f1eb] px-2 py-1 text-center text-xs font-bold text-[#16785f] cyber:bg-[rgba(19,109,130,.36)] cyber:text-[#8df5ff]">
                                 {places.features.length}
                             </span>
                         </div>
                         {mode === "drawing-area" && (
-                            <div className="drawing-status" role="status" aria-live="polite">
+                            <div className="mt-4 grid gap-[7px] rounded-lg border border-[#b9d8cc] bg-[#edf7f2] p-3 text-[.8rem] leading-[1.45] text-[#31564c] cyber:border-[#68edff]/30 cyber:bg-[rgba(17,40,65,.76)] cyber:text-[#ccebf2]" role="status" aria-live="polite">
                                 <b>正在绘制区域</b>
                                 <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 3 ? `至少还需添加 ${3 - drawDistinctCount} 个顶点。` : "点击首点或按 Enter 闭合。"}</span>
-                                <button className="button" type="button" onClick={closePanel}>取消绘制</button>
+                                <button className={`${ui.button} mt-0.5 w-max`} type="button" onClick={closePanel}>取消绘制</button>
                             </div>
                         )}
                         {mode === "drawing-line" && (
-                            <div className="drawing-status" role="status" aria-live="polite">
+                            <div className="mt-4 grid gap-[7px] rounded-lg border border-[#b9d8cc] bg-[#edf7f2] p-3 text-[.8rem] leading-[1.45] text-[#31564c] cyber:border-[#68edff]/30 cyber:bg-[rgba(17,40,65,.76)] cyber:text-[#ccebf2]" role="status" aria-live="polite">
                                 <b>正在绘制开放线</b>
                                 <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 2 ? `至少还需添加 ${2 - drawDistinctCount} 个顶点。` : "按 Enter 或鼠标右键结束。"}</span>
-                                <button className="button" type="button" onClick={closePanel}>取消绘制</button>
+                                <button className={`${ui.button} mt-0.5 w-max`} type="button" onClick={closePanel}>取消绘制</button>
                             </div>
                         )}
                         {(mode === "browse" || mode === "adding") &&
                             placeLoad.loading && (
-                                <p className="empty-state" role="status">
+                                <p className={`${ui.muted} mt-[14px]`} role="status">
                                     正在加载地点数据…
                                 </p>
                             )}
                         {(mode === "browse" || mode === "adding") &&
                             placeLoad.error && (
-                                <p className="form-error" role="alert">
+                                <p className={ui.error} role="alert">
                                     地点数据加载失败：{placeLoad.error}
                                 </p>
                             )}
@@ -654,11 +648,11 @@ function ApprovedManagementApp({ auth }) {
                 </aside>
             </main>
             {toast && (
-                <div className="toast" role="status" aria-live="polite">
+                <div className="fixed bottom-7 right-7 z-[2000] max-w-[380px] rounded-lg bg-[#24483f] px-[15px] py-[11px] text-[.84rem] text-white shadow-[0_5px_20px_rgba(0,0,0,.2)] cyber:border cyber:border-[#68edff] cyber:bg-[#101a35] cyber:text-[#e6fbff] cyber:shadow-[0_0_20px_rgba(0,234,255,.24)]" role="status" aria-live="polite">
                     {toast}
                 </div>
             )}
-            <footer>
+            <footer className="mx-auto flex w-[min(1440px,calc(100%_-_48px))] justify-between gap-5 px-0 pb-[30px] pt-5 text-[.74rem] text-[#60716d] cyber:text-[#9bdce5] max-[900px]:w-[min(calc(100%_-_24px),680px)] max-[900px]:flex-col max-[900px]:gap-[5px]">
                 <span>SN MAP · React 地图</span>
                 <span>地图数据 © OpenStreetMap contributors</span>
             </footer>

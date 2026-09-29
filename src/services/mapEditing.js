@@ -1,10 +1,12 @@
+import { ui } from "../uiClassNames.js";
+
 export const EDIT_IN_2D_MESSAGE = "请切换至2D地图后再进行编辑";
 
 export function getCreateActionPresentation(viewMode, unavailable, active) {
     const visuallyDisabled = viewMode === "3d";
-    // ai coding：3D 仅使用可点击的视觉禁用态，真实 disabled 只保留给加载、保存等不可操作状态。
+    // ai coding：aria-disabled 灰态同时锁定普通/赛博 hover 的背景色与背景图，按钮仍可点击并提示切换 2D。
     return {
-        className: `button ${active ? "" : "primary"}${visuallyDisabled ? " is-disabled" : ""}`.trim(),
+        className: `${ui.button} ${active ? "" : ui.primaryButton}${visuallyDisabled ? " aria-disabled:!border-[#c8d3cc] aria-disabled:!bg-[#eef1ef] aria-disabled:![background-image:none] aria-disabled:!text-[#60716d] aria-disabled:hover:!bg-[#eef1ef] aria-disabled:hover:![background-image:none] opacity-60 cyber:aria-disabled:!border-[#33455b] cyber:aria-disabled:!bg-[#172033] cyber:aria-disabled:![background-image:none] cyber:aria-disabled:!text-[#8296a5] cyber:aria-disabled:hover:!bg-[#172033] cyber:aria-disabled:hover:![background-image:none]" : ""}`.trim(),
         disabled: Boolean(unavailable),
         "aria-disabled": Boolean(unavailable) || visuallyDisabled,
         title: visuallyDisabled ? EDIT_IN_2D_MESSAGE : undefined,

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { isAnonymousUser } from "../services/supabaseAuth.js";
+import { ui } from "../uiClassNames.js";
 
 export default function AuthCard({ session, auth, placeCount, onExport }) {
     const [mode, setMode] = useState("login");
@@ -28,11 +29,11 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
     };
 
     return (
-        <section className="auth-card" aria-labelledby="account-title">
-            <div className="auth-summary">
+        <section className={`${ui.card} min-w-0 px-[18px] py-4`} aria-labelledby="account-title">
+            <div className="flex items-center justify-between gap-3">
                 <div>
-                    <p className="section-label">账号与数据空间</p>
-                    <h2 id="account-title">
+                    <p className={ui.eyebrow}>账号与数据空间</p>
+                    <h2 id="account-title" className="text-[1.05rem] font-bold">
                         {formal
                             ? session.user.email
                             : anonymous
@@ -42,7 +43,7 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
                 </div>
                 {formal && (
                     <button
-                        className="button"
+                        className={ui.button}
                         type="button"
                         disabled={auth.status.loading}
                         onClick={() => auth.signOut().catch(() => {})}
@@ -52,13 +53,13 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
                 )}
             </div>
             {formal ? (
-                <p className="auth-note">
+                <p className={`${ui.muted} mt-[9px] text-[.73rem] leading-[1.45]`}>
                     当前地点仅归此账号所有。退出后会进入新的匿名数据空间。
                 </p>
             ) : (
                 <>
                     <div
-                        className="auth-tabs"
+                        className="mt-[10px] flex gap-1"
                         role="tablist"
                         aria-label="账号操作"
                     >
@@ -66,6 +67,7 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
                             type="button"
                             role="tab"
                             aria-selected={mode === "login"}
+                            className="rounded-full border-0 bg-transparent px-[9px] py-[3px] text-[.75rem] text-[#60716d] aria-selected:bg-[#e4f1eb] aria-selected:font-bold aria-selected:text-[#0e5f4b] cyber:text-[#9fc8d3] cyber:aria-selected:bg-[rgba(25,91,111,.42)] cyber:aria-selected:text-[#68edff]"
                             onClick={() => setMode("login")}
                         >
                             登录
@@ -74,15 +76,17 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
                             type="button"
                             role="tab"
                             aria-selected={mode === "register"}
+                            className="rounded-full border-0 bg-transparent px-[9px] py-[3px] text-[.75rem] text-[#60716d] aria-selected:bg-[#e4f1eb] aria-selected:font-bold aria-selected:text-[#0e5f4b] cyber:text-[#9fc8d3] cyber:aria-selected:bg-[rgba(25,91,111,.42)] cyber:aria-selected:text-[#68edff]"
                             onClick={() => setMode("register")}
                         >
                             注册
                         </button>
                     </div>
-                    <form className="auth-form" onSubmit={submit}>
-                        <label>
+                    <form className="mt-[10px] grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2 max-[900px]:grid-cols-1" onSubmit={submit}>
+                        <label className={ui.label}>
                             邮箱
                             <input
+                                className={`${ui.input} mt-1`}
                                 type="email"
                                 required
                                 autoComplete="email"
@@ -92,9 +96,10 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
                                 }
                             />
                         </label>
-                        <label>
+                        <label className={ui.label}>
                             密码
                             <input
+                                className={`${ui.input} mt-1`}
                                 type="password"
                                 required
                                 minLength="6"
@@ -110,7 +115,7 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
                             />
                         </label>
                         <button
-                            className="button primary"
+                            className={`${ui.button} ${ui.primaryButton}`}
                             type="submit"
                             disabled={!auth.configured || auth.status.loading}
                         >
@@ -122,7 +127,7 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
                         </button>
                     </form>
                     {anonymous && (
-                        <p className="auth-warning">
+                        <p className="mt-[9px] text-[.73rem] leading-[1.45] text-[#704a19] cyber:text-[#ffd18a] [&_button]:border-0 [&_button]:bg-transparent [&_button]:px-[3px] [&_button]:font-bold [&_button]:text-[#0e6f59] [&_button]:underline cyber:[&_button]:text-[#68edff]">
                             登录或注册不会迁移、合并或覆盖当前匿名地点。请先
                             <button type="button" onClick={onExport}>
                                 导出备份
@@ -134,7 +139,7 @@ export default function AuthCard({ session, auth, placeCount, onExport }) {
             )}
             {(auth.status.error || (!formal && auth.status.message)) && (
                 <p
-                    className={auth.status.error ? "form-error" : "auth-note"}
+                    className={auth.status.error ? ui.error : `${ui.muted} mt-[9px] text-[.73rem]`}
                     role={auth.status.error ? "alert" : "status"}
                 >
                     {auth.status.error || auth.status.message}

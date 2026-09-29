@@ -13,6 +13,7 @@ import {
     updateOwnerGeneration,
 } from "../services/ownerGeneration.js";
 import { supabase } from "../services/supabaseClient.js";
+import { ui } from "../uiClassNames.js";
 
 const STATUS_LABELS = {
     pending: "待审核",
@@ -131,14 +132,14 @@ export default function AdminPanel({ ownerId }) {
     };
 
     return (
-        <section className="admin-card" aria-labelledby="admin-title">
-            <div className="section-heading">
+        <section className={`${ui.card} mt-[10px] p-5`} aria-labelledby="admin-title">
+            <div className="flex items-center justify-between gap-3">
                 <div>
-                    <p className="section-label">管理员</p>
-                    <h2 id="admin-title">注册审核</h2>
+                    <p className={ui.eyebrow}>管理员</p>
+                    <h2 id="admin-title" className="text-[1.05rem] font-bold">注册审核</h2>
                 </div>
                 <button
-                    className="button"
+                    className={ui.button}
                     type="button"
                     disabled={state.loading || Boolean(state.busyId)}
                     onClick={() => load()}
@@ -147,16 +148,16 @@ export default function AdminPanel({ ownerId }) {
                 </button>
             </div>
             {state.loading ? (
-                <p className="empty-state" role="status">
+                <p className={`${ui.muted} mt-[14px]`} role="status">
                     正在加载审核列表…
                 </p>
             ) : profiles.length ? (
-                <ul className="approval-list">
+                <ul className="mt-[14px] list-none p-0">
                     {profiles.map((profile) => (
-                        <li key={profile.id}>
+                        <li key={profile.id} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-[9px] border-t border-[#dbe3dd] py-[13px] cyber:border-[#68edff]/20">
                             <div>
-                                <strong>{profile.email}</strong>
-                                <span>
+                                <strong className="block break-words text-[.8rem]">{profile.email}</strong>
+                                <span className="mt-1 block break-words text-[.68rem] text-[#60716d] cyber:text-[#9fc8d3]">
                                     注册于{" "}
                                     {new Date(
                                         profile.created_at,
@@ -164,14 +165,14 @@ export default function AdminPanel({ ownerId }) {
                                 </span>
                             </div>
                             <span
-                                className={`approval-badge ${profile.approval_status}`}
+                                className={`self-start rounded-full px-[7px] py-[3px] text-[.65rem] font-bold ${profile.approval_status === "approved" ? "bg-[#dff1e8] text-[#0e5f4b] cyber:bg-[rgba(19,109,130,.36)] cyber:text-[#8df5ff]" : profile.approval_status === "rejected" ? "bg-[#ffe7e4] text-[#812e28] cyber:bg-[#381b2a] cyber:text-[#ff9caf]" : "bg-[#fff1d9] text-[#704a19] cyber:bg-[#35291c] cyber:text-[#ffd18a]"}`}
                             >
                                 {STATUS_LABELS[profile.approval_status]}
                             </span>
-                            <div className="approval-row-actions">
+                            <div className="col-span-full flex gap-[7px]">
                                 {profile.approval_status !== "approved" && (
                                     <button
-                                        className="button primary"
+                                        className={`${ui.button} ${ui.primaryButton} !min-h-[31px] !py-1 text-[.73rem]`}
                                         type="button"
                                         disabled={Boolean(state.busyId)}
                                         onClick={() => update(profile, "approved")}
@@ -183,7 +184,7 @@ export default function AdminPanel({ ownerId }) {
                                 )}
                                 {profile.approval_status !== "rejected" && (
                                     <button
-                                        className="button danger-text"
+                                        className={`${ui.button} ${ui.dangerButton} !min-h-[31px] !py-1 text-[.73rem]`}
                                         type="button"
                                         disabled={Boolean(state.busyId)}
                                         onClick={() => update(profile, "rejected")}
@@ -196,15 +197,15 @@ export default function AdminPanel({ ownerId }) {
                     ))}
                 </ul>
             ) : (
-                <p className="empty-state">暂无正式账号审核记录。</p>
+                <p className={`${ui.muted} mt-[14px]`}>暂无正式账号审核记录。</p>
             )}
             {state.message && (
-                <p className="file-status" role="status">
+                <p className={`${ui.muted} mt-[14px] break-words`} role="status">
                     {state.message}
                 </p>
             )}
             {state.error && (
-                <p className="form-error" role="alert">
+                <p className={ui.error} role="alert">
                     {state.error}
                 </p>
             )}

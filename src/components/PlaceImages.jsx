@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { ui } from "../uiClassNames.js";
 import ImageLightbox from "./ImageLightbox.jsx";
 import {
     deleteAfterConfirmation,
@@ -169,7 +170,7 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
     const view = imageCollectionView({ loading, error: loadError, images });
     if (!ownerId)
         return (
-            <p className="form-help">匿名兼容账号不能上传或管理实景图片。</p>
+            <p className={`${ui.muted} mt-[14px]`}>匿名兼容账号不能上传或管理实景图片。</p>
         );
     return (
         <section
@@ -180,7 +181,7 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
             <div className="place-images-heading">
                 <div>
                     <h4 id={`place-images-${placeId}`}>实景图片</h4>
-                    <small>
+                    <small className={ui.themeMuted}>
                         {view.state === "loading"
                             ? "图片加载中…"
                             : view.state === "error"
@@ -189,7 +190,7 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
                     </small>
                 </div>
                 <label
-                    className={`button image-upload ${unavailable ? "disabled" : ""}`}
+                    className={`${ui.button} image-upload ${unavailable ? "disabled" : ""}`}
                 >
                     {operation === "upload" ? (
                         <>
@@ -260,13 +261,13 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
                 </ul>
             )}
             {view.state === "empty" && (
-                <p className="file-status">暂无实景图片。</p>
+                <p className={`${ui.muted} mt-[14px]`}>暂无实景图片。</p>
             )}
             {view.state === "error" && (
                 <div className="image-load-error" role="alert">
                     <p>{loadError}</p>
                     <button
-                        className="button"
+                        className={ui.button}
                         type="button"
                         onClick={() => load()}
                     >
@@ -275,12 +276,12 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
                 </div>
             )}
             {status && (
-                <p className="file-status" role="status">
+                <p className={`${ui.muted} mt-[14px] break-words`} role="status">
                     {status}
                 </p>
             )}
             {actionError && !pendingDelete && (
-                <p className="form-error" role="alert">
+                <p className={ui.error} role="alert">
                     {actionError}
                 </p>
             )}
@@ -290,7 +291,7 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
                 typeof document !== "undefined" &&
                 createPortal(
                     <div
-                    className="confirm-overlay"
+                    className="fixed inset-0 z-[4100] grid place-items-center bg-[rgba(9,21,18,.64)] p-11 cyber:bg-[rgba(2,5,15,.78)]"
                     role="presentation"
                     onMouseDown={(event) => {
                         if (event.target === event.currentTarget && !busy)
@@ -299,26 +300,26 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
                 >
                     <div
                         ref={deleteDialogRef}
-                        className="confirm-dialog"
+                        className={`${ui.card} w-[min(420px,100%)] p-[22px] shadow-[0_18px_60px_rgba(0,0,0,.28)]`}
                         role="alertdialog"
                         aria-modal="true"
                         aria-labelledby="delete-image-title"
                         aria-describedby="delete-image-description"
                         tabIndex="-1"
                     >
-                        <h4 id="delete-image-title">删除这张实景图片？</h4>
-                        <p id="delete-image-description">
+                        <h4 className="m-0 text-base font-bold" id="delete-image-title">删除这张实景图片？</h4>
+                        <p className="my-[9px] mb-[18px] text-[.8rem] leading-[1.55] text-[#60716d] cyber:text-[#9fc8d3]" id="delete-image-description">
                             确认后将删除私有原图及相关公开副本，此操作无法撤销。
                         </p>
                         {actionError && (
-                            <p className="form-error" role="alert">
+                            <p className={ui.error} role="alert">
                                 {actionError}
                             </p>
                         )}
-                        <div>
+                        <div className="flex justify-end gap-2">
                             <button
                                 ref={cancelDeleteRef}
-                                className="button"
+                                className={ui.button}
                                 type="button"
                                 disabled={busy}
                                 onClick={() => setPendingDelete(null)}
@@ -326,7 +327,7 @@ export default function PlaceImages({ ownerId, mapId, placeId, disabled = false 
                                 取消
                             </button>
                             <button
-                                className="button danger-text"
+                                className={`${ui.button} ${ui.dangerButton}`}
                                 type="button"
                                 disabled={busy}
                                 onClick={confirmDelete}

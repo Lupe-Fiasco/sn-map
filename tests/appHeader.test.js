@@ -44,7 +44,7 @@ test("管理员权限满足时才在用户浮层显示管理员内容", () => {
     renderer.unmount();
 });
 
-test("设置入口显示三种 aria 单选项并回调所选模式", () => {
+test("切换主题入口显示三种 aria 单选项并回调所选模式", () => {
     let selected = "";
     const renderer = TestRenderer.create(React.createElement(AppHeader, {
         mapName: "睢宁县",
@@ -53,13 +53,28 @@ test("设置入口显示三种 aria 单选项并回调所选模式", () => {
         visualMode: "normal",
         onVisualModeChange: (mode) => { selected = mode; },
     }));
-    const trigger = renderer.root.findByProps({ "aria-label": "视觉模式设置" });
+    const trigger = renderer.root.findByProps({ "aria-label": "切换主题" });
+    assert.equal(trigger.props.title, "切换主题");
+    assert.equal(trigger.findByType("span").children.join(""), "切换主题");
     act(() => trigger.props.onClick());
+    assert.equal(renderer.root.findByProps({ role: "dialog" }).props["aria-label"], "切换主题");
+    assert.equal(renderer.root.findByProps({ id: "visual-mode-title" }).children.join(""), "切换主题");
     const options = renderer.root.findAllByProps({ role: "radio" });
     assert.deepEqual(options.map((option) => option.props["aria-checked"]), [true, false, false]);
+    assert.match(options[0].props.className, /cyber:aria-checked:border-\[#68edff\]/);
     act(() => options[1].props.onClick());
     assert.equal(selected, "cyberpunk");
     assert.equal(renderer.root.findAllByProps({ role: "dialog" }).length, 0);
+    renderer.unmount();
+});
+
+test("Header 保留紧凑高度与独立横向留白，并通过主题 utility 着色", () => {
+    const renderer = renderHeader(false);
+    const header = renderer.root.findByType("header");
+    const inner = header.find((node) => node.type === "div" && node.props.className?.includes("site-header-inner"));
+    assert.match(header.props.className, /cyber:bg-\[rgba\(8,13,28,\.96\)\]/);
+    assert.match(inner.props.className, /min-h-\[68px\]/);
+    assert.match(inner.props.className, /px-\[30px\]/);
     renderer.unmount();
 });
 

@@ -1,4 +1,5 @@
 import React, { Component } from "react";
+import { ui } from "../uiClassNames.js";
 
 export default class City3DErrorBoundary extends Component {
   constructor(props) {
@@ -30,8 +31,8 @@ export default class City3DErrorBoundary extends Component {
         <strong>3D 城市视图加载失败</strong>
         <span>当前设备暂时无法启动 3D 视图，您可以返回 2D 地图继续操作。</span>
         <div className="city3d-actions">
-          <button className="button primary" type="button" onClick={this.props.onReturnTo2D}>返回 2D 地图</button>
-          <button className="button" type="button" onClick={this.handleRetry} disabled={this.props.canRetry === false}>
+          <button className={`${ui.button} ${ui.primaryButton}`} type="button" onClick={this.props.onReturnTo2D}>返回 2D 地图</button>
+          <button className={ui.button} type="button" onClick={this.handleRetry} disabled={this.props.canRetry === false}>
             {this.props.canRetry === false ? "重试次数已用完" : "重试加载 3D"}
           </button>
         </div>

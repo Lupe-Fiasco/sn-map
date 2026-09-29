@@ -4,6 +4,7 @@ import { validateLineStringGeometry, validatePolygonGeometry } from "../services
 import PlaceImages from "./PlaceImages.jsx";
 import { getTypeOptionsForGeometry, isTypeAllowedForGeometry } from "../services/placeTypes.js";
 import { createInitialPlaceFormValues, resolveShapeGeometry } from "../services/placeFormState.js";
+import { ui } from "../uiClassNames.js";
 
 export default function PlaceForm({ feature, ownerId, mapId, initialCoordinates, geometry, containedPlaces = [], types, bounds, disabled, onSave, onCancel, onCoordinatesChange }) {
   // ai coding：新增流程只从 pending coordinates/geometry 建立表单；null feature/geometry 不再被解引用。
@@ -42,18 +43,18 @@ export default function PlaceForm({ feature, ownerId, mapId, initialCoordinates,
       setError(saveError instanceof Error ? saveError.message : "保存失败，请稍后重试。");
     }
   };
-  return <form className="editor-panel" onSubmit={submit} noValidate aria-busy={disabled}>
-    <div className="editor-title"><h3>{feature ? `编辑${isLine ? "线" : shapeGeometry ? "区域" : "地点"}` : `新增${isLine ? "线" : shapeGeometry ? "区域" : "地点"}`}</h3><button className="icon-button" type="button" onClick={onCancel} aria-label="关闭表单">×</button></div>
-    <p className="form-help">{feature ? (shapeGeometry ? `拖拽顶点调整${isLine ? "开放线" : "区域"}；保存后才会在本地暂存。当前 ${isLine ? shapeGeometry.coordinates.length : shapeGeometry.coordinates[0].length - 1} 个顶点。` : "修改后将立即在本地暂存。") : shapeGeometry ? `${isLine ? "开放线" : "区域"}已完成，共 ${isLine ? shapeGeometry.coordinates.length : shapeGeometry.coordinates[0].length - 1} 个顶点；请填写地点信息。` : "可精确调整经纬度；坐标必须位于地图矩形范围内。"}</p>
-    {error && <div className="form-error" role="alert">{error}</div>}
-    <label>名称 <span aria-hidden="true">*</span><input autoFocus name="name" maxLength="80" value={values.name} onChange={update} required /></label>
-    <div className="form-field"><label id="place-type-label" htmlFor="place-type">类型 <span aria-hidden="true">*</span></label><TypeSelect id="place-type" name="type" value={values.type} options={typeOptions} placeholder="请选择类型" disabled={disabled} required onChange={(value) => setValues((current) => ({ ...current, type: value }))} /></div>
-    {!shapeGeometry && <div className="coordinate-fields"><label>经度<input name="longitude" type="number" step="any" value={values.longitude} onChange={update} required /></label><label>纬度<input name="latitude" type="number" step="any" value={values.latitude} onChange={update} required /></label></div>}
-    {isLine && <div className="contained-places"><span>包含地点</span>{containedPlaces.length ? <ul>{containedPlaces.map((place) => <li key={place.id}>{place.properties.name}</li>)}</ul> : <small>未关联地点；绘制时点击已有点可建立关联。</small>}</div>}
-    <label>地址<input name="address" maxLength="160" value={values.address} onChange={update} /></label>
-    <label>电话<input name="phone" type="tel" maxLength="40" value={values.phone} onChange={update} /></label>
-    <label>备注<textarea name="description" rows="3" maxLength="500" value={values.description} onChange={update} /></label>
-    {feature ? <PlaceImages ownerId={ownerId} mapId={mapId} placeId={feature.id} disabled={disabled} /> : <p className="form-help">保存地点后即可上传实景图片。</p>}
-    <div className="form-actions"><button className="button primary" type="submit" disabled={disabled}>保存{isLine ? "线" : shapeGeometry ? "区域" : "地点"}</button><button className="button" type="button" onClick={onCancel}>取消</button></div>
+  return <form className="mt-4" onSubmit={submit} noValidate aria-busy={disabled}>
+    <div className={ui.sectionHeading}><h3 className="m-0 text-base font-bold">{feature ? `编辑${isLine ? "线" : shapeGeometry ? "区域" : "地点"}` : `新增${isLine ? "线" : shapeGeometry ? "区域" : "地点"}`}</h3><button className={ui.iconButton} type="button" onClick={onCancel} aria-label="关闭表单">×</button></div>
+    <p className={`${ui.muted} mt-[14px]`}>{feature ? (shapeGeometry ? `拖拽顶点调整${isLine ? "开放线" : "区域"}；保存后才会在本地暂存。当前 ${isLine ? shapeGeometry.coordinates.length : shapeGeometry.coordinates[0].length - 1} 个顶点。` : "修改后将立即在本地暂存。") : shapeGeometry ? `${isLine ? "开放线" : "区域"}已完成，共 ${isLine ? shapeGeometry.coordinates.length : shapeGeometry.coordinates[0].length - 1} 个顶点；请填写地点信息。` : "可精确调整经纬度；坐标必须位于地图矩形范围内。"}</p>
+    {error && <div className={ui.error} role="alert">{error}</div>}
+    <label className={ui.formLabel}>名称 <span aria-hidden="true">*</span><input className={ui.input} autoFocus name="name" maxLength="80" value={values.name} onChange={update} required /></label>
+    <div className="mt-3"><label className={`${ui.label} mb-[5px] text-[.77rem]`} id="place-type-label" htmlFor="place-type">类型 <span aria-hidden="true">*</span></label><TypeSelect id="place-type" name="type" value={values.type} options={typeOptions} placeholder="请选择类型" disabled={disabled} required onChange={(value) => setValues((current) => ({ ...current, type: value }))} /></div>
+    {!shapeGeometry && <div className="grid grid-cols-2 gap-[10px]"><label className={ui.formLabel}>经度<input className={ui.input} name="longitude" type="number" step="any" value={values.longitude} onChange={update} required /></label><label className={ui.formLabel}>纬度<input className={ui.input} name="latitude" type="number" step="any" value={values.latitude} onChange={update} required /></label></div>}
+    {isLine && <div className="mt-3 rounded-lg border border-[#dbe3dd] bg-[#f7faf8] p-[10px] text-[.77rem] font-semibold text-[#60716d] cyber:border-[#68edff]/30 cyber:bg-[rgba(17,40,65,.76)] cyber:text-[#ccebf2]"><span>包含地点</span>{containedPlaces.length ? <ul className="mt-2 flex list-none flex-wrap gap-1.5 p-0">{containedPlaces.map((place) => <li className="rounded-full bg-[#dff1e8] px-2 py-1 text-[.72rem] text-[#0e5f4b] cyber:bg-[rgba(25,91,111,.42)] cyber:text-[#68edff]" key={place.id}>{place.properties.name}</li>)}</ul> : <small className="mt-1.5 block font-normal">未关联地点；绘制时点击已有点可建立关联。</small>}</div>}
+    <label className={ui.formLabel}>地址<input className={ui.input} name="address" maxLength="160" value={values.address} onChange={update} /></label>
+    <label className={ui.formLabel}>电话<input className={ui.input} name="phone" type="tel" maxLength="40" value={values.phone} onChange={update} /></label>
+    <label className={ui.formLabel}>备注<textarea className={`${ui.input} resize-y`} name="description" rows="3" maxLength="500" value={values.description} onChange={update} /></label>
+    {feature ? <PlaceImages ownerId={ownerId} mapId={mapId} placeId={feature.id} disabled={disabled} /> : <p className={`${ui.muted} mt-[14px]`}>保存地点后即可上传实景图片。</p>}
+    <div className={ui.actionRow}><button className={`${ui.button} ${ui.primaryButton}`} type="submit" disabled={disabled}>保存{isLine ? "线" : shapeGeometry ? "区域" : "地点"}</button><button className={ui.button} type="button" onClick={onCancel}>取消</button></div>
   </form>;
 }

@@ -21,8 +21,9 @@ test("公开页非地图状态实际挂载在全视口页面画布中", () => {
     for (const role of ["status", "alert"]) {
         const renderer = TestRenderer.create(React.createElement(PublicSharePageFrame, null,
             React.createElement("main", { className: "share-message", role }, role)));
-        assert.equal(renderer.root.findByProps({ className: "public-share-page" }).type, "div");
-        assert.equal(renderer.root.findByProps({ role }).parent.props.className, "public-share-page");
+        const frame = renderer.root.find((node) => node.type === "div" && node.props.className?.includes("public-share-page"));
+        assert.match(frame.props.className, /cyber:bg-\[#070b18\]/);
+        assert.equal(renderer.root.findByProps({ role }).parent, frame);
         renderer.unmount();
     }
 });
