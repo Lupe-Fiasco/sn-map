@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import MapView from "./components/MapView.jsx";
 import PlaceList from "./components/PlaceList.jsx";
 import PlaceForm from "./components/PlaceForm.jsx";
@@ -13,6 +13,8 @@ import AppHeader from "./components/AppHeader.jsx";
 import FormErrorBoundary from "./components/FormErrorBoundary.jsx";
 import City3DErrorBoundary from "./components/City3DErrorBoundary.jsx";
 import MapSelectionCard from "./components/MapSelectionCard.jsx";
+import ToastViewport from "./components/ToastViewport.jsx";
+import ManagementWorkspace from "./components/ManagementWorkspace.jsx";
 import { usePlaces } from "./hooks/usePlaces.js";
 import { useAuth } from "./hooks/useAuth.js";
 import { resolveAppRoute } from "./services/approval.js";
@@ -21,6 +23,7 @@ import { finishAreaDrawing, finishLineDrawing } from "./services/lineDrawing.js"
 import { getCreateActionPresentation, runCreateAction } from "./services/mapEditing.js";
 import { applyVisualModeTheme, persistVisualMode, readVisualMode } from "./services/visualMode.js";
 import { ui } from "./uiClassNames.js";
+import { inferToastType, toastReducer } from "./services/toast.js";
 import {
     getCity3DImportAttempt,
     hasNextCity3DImportAttempt,
@@ -88,10 +91,11 @@ function ApprovedManagementApp({ auth }) {
     const [containedPlaceIds, setContainedPlaceIds] = useState([]);
     const [editGeometry, setEditGeometry] = useState(null);
     const [query, setQuery] = useState("");
-    const [typeFilter, setTypeFilter] = useState("");
+    const [typeFilter, setTypeFilter] = useState([]);
     const [syncing, setSyncing] = useState(false);
     const [fileStatus, setFileStatus] = useState("");
-    const [toast, setToast] = useState("");
+    const [toasts, dispatchToast] = useReducer(toastReducer, []);
+    const toastSequenceRef = useRef(0);
     const [mapErrors, setMapErrors] = useState({ bounds: "", roads: "" });
     const workspaceRef = useRef(null);
     const mapPanelRef = useRef(null);
@@ -114,17 +118,18 @@ function ApprovedManagementApp({ auth }) {
         [drawCoordinates],
     );
 
-    const notify = useCallback((message) => setToast(message), []);
+    // ai coding：提示以队列保存，重复消息也拥有独立生命周期，并允许调用方显式覆盖语义类型。
+    const notify = useCallback((message, type = inferToastType(message)) => {
+        toastSequenceRef.current += 1;
+        dispatchToast({ type: "add", toast: { id: toastSequenceRef.current, message, type, exiting: false } });
+    }, []);
+    const dismissToast = useCallback((id) => dispatchToast({ type: "dismiss", id }), []);
+    const removeToast = useCallback((id) => dispatchToast({ type: "remove", id }), []);
     useEffect(() => {
         // ai coding：视觉偏好独立于 owner/map 数据持久化，并在根节点提供轻量主题选择器。
         const nextMode = persistVisualMode(visualMode);
         applyVisualModeTheme(nextMode);
     }, [visualMode]);
-    useEffect(() => {
-        if (!toast) return undefined;
-        const timer = setTimeout(() => setToast(""), 3200);
-        return () => clearTimeout(timer);
-    }, [toast]);
     const closePanel = useCallback(() => {
         setMode("browse");
         setSelectedId(null);
@@ -153,7 +158,7 @@ function ApprovedManagementApp({ auth }) {
         // ai coding：地区切换同步清除道路错误、筛选和所有仅属于前一地图的 UI 状态。
         setMapErrors({ bounds: "", roads: "" });
         setQuery("");
-        setTypeFilter("");
+        setTypeFilter([]);
     }, [mapId]);
     useLayoutEffect(() => {
         const workspace = workspaceRef.current;
@@ -428,7 +433,44 @@ function ApprovedManagementApp({ auth }) {
                 visualMode={visualMode}
                 onVisualModeChange={setVisualMode}
             />
-            <main ref={workspaceRef} className="management-workspace">
+            <ManagementWorkspace workspaceRef={workspaceRef} sidebar={<>
+                    {/* ai coding：地图选择移至用户地点操作区之前，切换逻辑和禁用条件保持不变。 */}
+                    <MapSelectionCard maps={maps} mapId={mapId} mapName={mapConfig?.name} disabled={!maps.length || busy} onChange={(event) => setMapId(event.target.value)} />
+                    <section
+                        className={`${ui.card} relative z-[2] overflow-visible p-5`}
+                        aria-labelledby="places-title"
+                    >
+                        <div className={ui.sectionHeading}>
+                            <div>
+                                <p className={ui.eyebrow}>用户地点</p>
+                                <h2 id="places-title">地点列表</h2>
+                            </div>
+                            <span className="min-w-[26px] rounded-full bg-[#e4f1eb] px-2 py-1 text-center text-xs font-bold text-[#16785f] cyber:bg-[rgba(19,109,130,.36)] cyber:text-[#8df5ff]">
+                                {places.features.length}
+                            </span>
+                        </div>
+                        {mode === "drawing-area" && (
+                            <div className="mt-4 grid gap-[7px] rounded-lg border border-[#b9d8cc] bg-[#edf7f2] p-3 text-[.8rem] leading-[1.45] text-[#31564c] cyber:border-[#68edff]/30 cyber:bg-[rgba(17,40,65,.76)] cyber:text-[#ccebf2]" role="status" aria-live="polite">
+                                <b>正在绘制区域</b>
+                                <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 3 ? `至少还需添加 ${3 - drawDistinctCount} 个顶点。` : "点击首点或按 Enter 闭合。"}</span>
+                                <button className={`${ui.button} mt-0.5 w-max`} type="button" onClick={closePanel}>取消绘制</button>
+                            </div>
+                        )}
+                        {mode === "drawing-line" && (
+                            <div className="mt-4 grid gap-[7px] rounded-lg border border-[#b9d8cc] bg-[#edf7f2] p-3 text-[.8rem] leading-[1.45] text-[#31564c] cyber:border-[#68edff]/30 cyber:bg-[rgba(17,40,65,.76)] cyber:text-[#ccebf2]" role="status" aria-live="polite">
+                                <b>正在绘制开放线</b>
+                                <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 2 ? `至少还需添加 ${2 - drawDistinctCount} 个顶点。` : "按 Enter 或鼠标右键结束。"}</span>
+                                <button className={`${ui.button} mt-0.5 w-max`} type="button" onClick={closePanel}>取消绘制</button>
+                            </div>
+                        )}
+                        {(mode === "browse" || mode === "adding") && placeLoad.loading && <p className={`${ui.muted} mt-[14px]`} role="status">正在加载地点数据…</p>}
+                        {(mode === "browse" || mode === "adding") && placeLoad.error && <p className={ui.error} role="alert">地点数据加载失败：{placeLoad.error}</p>}
+                        {(mode === "browse" || mode === "adding") && !placeLoad.loading && !placeLoad.error && <PlaceList places={places} types={types} unsyncedIds={unsynced.currentIds} query={query} typeFilter={typeFilter} onQuery={setQuery} onTypeFilter={setTypeFilter} onSelect={selectPlace} />}
+                        {(mode === "creating" || mode === "editing") && bounds && <FormErrorBoundary key={`${mode}-${selectedId ?? "new"}`} onClose={closePanel}><PlaceForm feature={mode === "editing" ? selected : null} ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id} mapId={mapId} initialCoordinates={newCoordinates} geometry={mode === "editing" ? editGeometry : newGeometry} containedPlaces={(mode === "editing" ? selected?.properties.contained_place_ids : containedPlaceIds)?.map((id) => places.features.find((item) => item.id === id && item.geometry.type === "Point")).filter(Boolean) ?? []} types={types} bounds={bounds} disabled={busy} onSave={savePlace} onCancel={closePanel} onCoordinatesChange={mode === "creating" && !newGeometry ? updatePendingCoordinates : undefined} /></FormErrorBoundary>}
+                        {mode === "details" && selected && <PlaceDetails feature={selected} ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id} mapId={mapId} type={types.find((type) => type.id === selected.properties.type)} containedPlaces={(selected.properties.contained_place_ids ?? []).map((id) => places.features.find((item) => item.id === id && item.geometry.type === "Point")).filter(Boolean)} disabled={busy} onEdit={editPlace} onDelete={deletePlace} onClose={closePanel} />}
+                    </section>
+                    <SaveCard total={places.features.length} unsyncedCount={unsynced.count} loading={placeLoad.loading} syncing={syncing} status={fileStatus} cloud={cloud} canSync={"showOpenFilePicker" in window} onSync={syncPlaces} onExport={exportPlaces} />
+                </>}>
                 {/* ai coding：公开快照跟随地图主列排列，避免继续占用地点维护侧栏。 */}
                 <div className="map-column">
                 <section ref={mapPanelRef} className={`map-panel ${ui.card} ${ui.mapCard}`} aria-labelledby="map-title">
@@ -520,8 +562,9 @@ function ApprovedManagementApp({ auth }) {
                                     mapName={mapConfig.name}
                                     bounds={bounds}
                                     baseRoadsPath={viewConfig.baseRoadsPath}
-                                    places={places}
-                                    onSelect={selectPlace}
+                                     places={places}
+                                     selectedId={selectedId}
+                                     onSelect={selectPlace}
                                     onRoadStatus={roadStatus}
                                     visualMode={visualMode}
                                 />
@@ -536,122 +579,8 @@ function ApprovedManagementApp({ auth }) {
                     {/* ai coding：owner 切换时同步重建卡片，首帧不复用上一账号的本地 UI 状态。 */}
                     <SnapshotCard key={`${auth.session?.user?.id ?? "no-owner"}:${mapId}`} ownerId={auth.session?.user?.id} mapId={mapId} mapName={mapConfig?.name} imagesEnabled={!auth.session?.user?.is_anonymous && (auth.access.state === "approved" || auth.access.isAdmin)} places={places} cloud={cloud} />
                 </div>
-                <aside className={ui.infoPanel} aria-label="地点维护面板">
-                    {/* ai coding：地图选择移至用户地点操作区之前，切换逻辑和禁用条件保持不变。 */}
-                    <MapSelectionCard maps={maps} mapId={mapId} mapName={mapConfig?.name} disabled={!maps.length || busy} onChange={(event) => setMapId(event.target.value)} />
-                    <section
-                        className={`${ui.card} relative z-[2] overflow-visible p-5`}
-                        aria-labelledby="places-title"
-                    >
-                        <div className={ui.sectionHeading}>
-                            <div>
-                                <p className={ui.eyebrow}>用户地点</p>
-                                <h2 id="places-title">地点列表</h2>
-                            </div>
-                            <span className="min-w-[26px] rounded-full bg-[#e4f1eb] px-2 py-1 text-center text-xs font-bold text-[#16785f] cyber:bg-[rgba(19,109,130,.36)] cyber:text-[#8df5ff]">
-                                {places.features.length}
-                            </span>
-                        </div>
-                        {mode === "drawing-area" && (
-                            <div className="mt-4 grid gap-[7px] rounded-lg border border-[#b9d8cc] bg-[#edf7f2] p-3 text-[.8rem] leading-[1.45] text-[#31564c] cyber:border-[#68edff]/30 cyber:bg-[rgba(17,40,65,.76)] cyber:text-[#ccebf2]" role="status" aria-live="polite">
-                                <b>正在绘制区域</b>
-                                <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 3 ? `至少还需添加 ${3 - drawDistinctCount} 个顶点。` : "点击首点或按 Enter 闭合。"}</span>
-                                <button className={`${ui.button} mt-0.5 w-max`} type="button" onClick={closePanel}>取消绘制</button>
-                            </div>
-                        )}
-                        {mode === "drawing-line" && (
-                            <div className="mt-4 grid gap-[7px] rounded-lg border border-[#b9d8cc] bg-[#edf7f2] p-3 text-[.8rem] leading-[1.45] text-[#31564c] cyber:border-[#68edff]/30 cyber:bg-[rgba(17,40,65,.76)] cyber:text-[#ccebf2]" role="status" aria-live="polite">
-                                <b>正在绘制开放线</b>
-                                <span>已添加 {drawDistinctCount} 个不同顶点。{drawDistinctCount < 2 ? `至少还需添加 ${2 - drawDistinctCount} 个顶点。` : "按 Enter 或鼠标右键结束。"}</span>
-                                <button className={`${ui.button} mt-0.5 w-max`} type="button" onClick={closePanel}>取消绘制</button>
-                            </div>
-                        )}
-                        {(mode === "browse" || mode === "adding") &&
-                            placeLoad.loading && (
-                                <p className={`${ui.muted} mt-[14px]`} role="status">
-                                    正在加载地点数据…
-                                </p>
-                            )}
-                        {(mode === "browse" || mode === "adding") &&
-                            placeLoad.error && (
-                                <p className={ui.error} role="alert">
-                                    地点数据加载失败：{placeLoad.error}
-                                </p>
-                            )}
-                        {(mode === "browse" || mode === "adding") &&
-                            !placeLoad.loading &&
-                            !placeLoad.error && (
-                                <PlaceList
-                                    places={places}
-                                    types={types}
-                                    unsyncedIds={unsynced.currentIds}
-                                    query={query}
-                                    typeFilter={typeFilter}
-                                    onQuery={setQuery}
-                                    onTypeFilter={setTypeFilter}
-                                    onSelect={selectPlace}
-                                />
-                            )}
-                        {(mode === "creating" || mode === "editing") &&
-                            bounds && (
-                                <FormErrorBoundary key={`${mode}-${selectedId ?? "new"}`} onClose={closePanel}>
-                                <PlaceForm
-                                    feature={
-                                        mode === "editing" ? selected : null
-                                    }
-                                     ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
-                                    mapId={mapId}
-                                    initialCoordinates={newCoordinates}
-                                     geometry={mode === "editing" ? editGeometry : newGeometry}
-                                     containedPlaces={(mode === "editing" ? selected?.properties.contained_place_ids : containedPlaceIds)?.map((id) => places.features.find((item) => item.id === id && item.geometry.type === "Point")).filter(Boolean) ?? []}
-                                    types={types}
-                                    bounds={bounds}
-                                    disabled={busy}
-                                    onSave={savePlace}
-                                    onCancel={closePanel}
-                                    onCoordinatesChange={
-                                        mode === "creating" && !newGeometry
-                                            ? updatePendingCoordinates
-                                            : undefined
-                                    }
-                                />
-                                </FormErrorBoundary>
-                            )}
-                        {mode === "details" && selected && (
-                            <PlaceDetails
-                                feature={selected}
-                                 ownerId={auth.session?.user?.is_anonymous ? null : auth.session?.user?.id}
-                                mapId={mapId}
-                                 type={types.find(
-                                    (type) =>
-                                        type.id === selected.properties.type,
-                                 )}
-                                containedPlaces={(selected.properties.contained_place_ids ?? []).map((id) => places.features.find((item) => item.id === id && item.geometry.type === "Point")).filter(Boolean)}
-                                disabled={busy}
-                                onEdit={editPlace}
-                                onDelete={deletePlace}
-                                onClose={closePanel}
-                            />
-                        )}
-                    </section>
-                    <SaveCard
-                        total={places.features.length}
-                        unsyncedCount={unsynced.count}
-                        loading={placeLoad.loading}
-                        syncing={syncing}
-                        status={fileStatus}
-                        cloud={cloud}
-                        canSync={"showOpenFilePicker" in window}
-                        onSync={syncPlaces}
-                        onExport={exportPlaces}
-                    />
-                </aside>
-            </main>
-            {toast && (
-                <div className="fixed bottom-7 right-7 z-[2000] max-w-[380px] rounded-lg bg-[#24483f] px-[15px] py-[11px] text-[.84rem] text-white shadow-[0_5px_20px_rgba(0,0,0,.2)] cyber:border cyber:border-[#68edff] cyber:bg-[#101a35] cyber:text-[#e6fbff] cyber:shadow-[0_0_20px_rgba(0,234,255,.24)]" role="status" aria-live="polite">
-                    {toast}
-                </div>
-            )}
+            </ManagementWorkspace>
+            <ToastViewport toasts={toasts} onDismiss={dismissToast} onRemove={removeToast} />
             <footer className="mx-auto flex w-[min(1440px,calc(100%_-_48px))] justify-between gap-5 px-0 pb-[30px] pt-5 text-[.74rem] text-[#60716d] cyber:text-[#9bdce5] max-[900px]:w-[min(calc(100%_-_24px),680px)] max-[900px]:flex-col max-[900px]:gap-[5px]">
                 <span>SN MAP · React 地图</span>
                 <span>地图数据 © OpenStreetMap contributors</span>

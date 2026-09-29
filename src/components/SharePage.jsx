@@ -3,9 +3,10 @@ import MapView from "./MapView.jsx";
 import PublicMapViewport from "./PublicMapViewport.jsx";
 import PublicSharePageFrame from "./PublicSharePageFrame.jsx";
 import PublicImageGallery from "./PublicImageGallery.jsx";
+import PublicThemeMenu from "./PublicThemeMenu.jsx";
 import { fetchPublicSnapshot, publicPlaceDetails } from "../services/mapSnapshots.js";
 import { supabase, supabaseConfiguration } from "../services/supabaseClient.js";
-import { applyVisualModeTheme, readVisualMode, subscribeVisualMode } from "../services/visualMode.js";
+import { applyVisualModeTheme, persistVisualMode, readVisualMode, subscribeVisualMode } from "../services/visualMode.js";
 import { resolvePublicMapData } from "../services/publicMapView.js";
 import { ui } from "../uiClassNames.js";
 
@@ -21,6 +22,12 @@ export default function SharePage({ token }) {
     const [roadError, setRoadError] = useState("");
     const [reloadKey, setReloadKey] = useState(0);
     const [visualMode, setVisualMode] = useState(readVisualMode);
+    const changeVisualMode = useCallback((nextMode) => {
+        // ai coding：公开工具栏直接更新本地状态、持久化偏好和根主题，2D/3D 渲染器在同一帧链路收到新模式。
+        const mode = persistVisualMode(nextMode);
+        setVisualMode(mode);
+        applyVisualModeTheme(mode);
+    }, []);
     useEffect(() => subscribeVisualMode((nextMode) => {
         // ai coding：公开快照只订阅视觉偏好并同步根主题，保持只读且不会初始化匿名登录。
         setVisualMode(nextMode);
@@ -48,7 +55,7 @@ export default function SharePage({ token }) {
 
     // ai coding：公开路由用独立全视口画布包住加载、失败、无快照和地图分支，主题背景不会在短内容下中断。
     return <PublicSharePageFrame>
-        <header className="public-header mx-auto flex w-[calc(100%_-_48px)] max-w-[1440px] items-end justify-between gap-6 pb-6 pt-[38px]"><div><p className={ui.eyebrow}>SN MAP / {data.map?.name || "公开快照"}</p><h1 className="mb-2 text-[clamp(1.65rem,3vw,2.35rem)] font-bold tracking-[-.035em]">{data.row?.title || "公开地图"}</h1><p className={`${ui.muted} m-0 max-w-[680px] leading-[1.7]`}>无需登录的只读地图。快照仅反映发布时的数据。</p></div><a className={ui.button} href={window.location.pathname}>返回管理端</a></header>
+        <header className="public-header mx-auto flex w-[calc(100%_-_48px)] max-w-[1440px] items-end justify-between gap-6 pb-6 pt-[38px]"><div><p className={ui.eyebrow}>SN MAP / {data.map?.name || "公开快照"}</p><h1 className="mb-2 text-[clamp(1.65rem,3vw,2.35rem)] font-bold tracking-[-.035em]">{data.row?.title || "公开地图"}</h1><p className={`${ui.muted} m-0 max-w-[680px] leading-[1.7]`}>无需登录的只读地图。快照仅反映发布时的数据。</p></div><div className="flex shrink-0 items-center gap-2"><PublicThemeMenu visualMode={visualMode} onVisualModeChange={changeVisualMode} /><a className={ui.button} href={window.location.pathname}>返回管理端</a></div></header>
         {data.loading ? <main className={`${ui.card} block min-h-[420px] p-[60px] text-center`} role="status">正在加载公开快照与图片…</main> : data.error ? <main className={`${ui.card} block min-h-[420px] p-[60px] text-center text-[#812e28] cyber:text-[#ffc0cc]`} role="alert"><h2>无法打开公开地图</h2><p>{data.error}</p><button className={ui.button} type="button" onClick={() => { setData((current) => ({ ...current, loading: true, error: "" })); setReloadKey((value) => value + 1); }}>重试</button></main> : (
             <main className="public-main">
                 <section className={`${ui.card} ${ui.mapCard}`} aria-labelledby="public-map-title"><div className={ui.panelHeading}><div><p className={ui.eyebrow}>{data.map.name} · 只读地图</p><h2 id="public-map-title">{data.row.snapshot.features.length} 个地点与区域</h2></div><span className="publish-badge public">PUBLIC</span></div>{roadError && <p className="map-error" role="alert">{roadError}</p>}<PublicMapViewport data={data} selectedId={selectedId} onSelect={setSelectedId} onRoadStatus={roadStatus} visualMode={visualMode} MapComponent={MapView} /></section>

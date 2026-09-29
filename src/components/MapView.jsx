@@ -3,6 +3,7 @@ import L from "leaflet";
 import { TYPE_ICON_PATHS } from "./TypeIcon.jsx";
 import { createPolygonDraftGeometry, insertPolygonVertex } from "../services/geojson.js";
 import { applyLeafletVisualMode, getVisualModeCapabilities } from "../services/visualMode.js";
+import { focusLeafletPlace } from "../services/mapSelection.js";
 
 const MAX_ZOOM = 19;
 const padding = L.point(12, 12);
@@ -673,13 +674,7 @@ export default function MapView({
     useEffect(() => {
         if (!selectedId) return;
         const feature = places.features.find((item) => item.id === selectedId);
-        if (feature) {
-            if (feature.geometry.type === "Point") mapRef.current?.panTo([feature.geometry.coordinates[1], feature.geometry.coordinates[0]]);
-            else {
-                const coordinates = feature.geometry.type === "LineString" ? feature.geometry.coordinates : feature.geometry.coordinates[0];
-                mapRef.current?.panTo(L.polyline(coordinates.map(([longitude, latitude]) => [latitude, longitude])).getBounds().getCenter());
-            }
-        }
+        if (feature) focusLeafletPlace(mapRef.current, feature);
     }, [selectedId, places]);
 
     return (

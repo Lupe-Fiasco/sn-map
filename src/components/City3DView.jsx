@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Edges, MapControls } from "@react-three/drei";
 import * as THREE from "three";
 import { ui } from "../uiClassNames.js";
@@ -8,6 +8,7 @@ import { CITY_3D_STYLE, classifyLinearPlace, classifyPlaceBuilding, getCity3DCam
 import { createPlaceHoverStrategy, createPointPlaceBuildings, createPolygonPlaceBuildings } from "../services/city3DPlaces.js";
 import { applyCity3DPanBounds, clearTooltipForKey, getCity3DPanBounds, isUserPlaceHovered, retainInitialTooltipPosition } from "../services/city3DInteraction.js";
 import { getVisualModeCapabilities, updateProceduralBuildingMaterial } from "../services/visualMode.js";
+import { getCity3DSelectionView } from "../services/mapSelection.js";
 
 function createRoadGeometry(paths, kind, width, elevation, thickness) {
   const style = CITY_3D_STYLE.baseRoads[kind];
@@ -291,8 +292,9 @@ function CyberGroundWaves({ extent }) {
   );
 }
 
-function BoundedMapControls({ projection, cameraConfig }) {
+function BoundedMapControls({ projection, cameraConfig, selectedPlace }) {
   const controlsRef = useRef(null);
+  const camera = useThree((state) => state.camera);
   const panBounds = useMemo(() => getCity3DPanBounds(projection), [projection]);
   // ai coding：保持 onChange 引用稳定，避免 drei 在 hover 重渲染时 dispose/reconnect controls，导致当前 pointerup 丢失并锁住后续手势。
   const enforceBounds = useCallback(() => {
@@ -300,14 +302,27 @@ function BoundedMapControls({ projection, cameraConfig }) {
     if (!controls) return;
     applyCity3DPanBounds(controls, panBounds);
   }, [panBounds]);
+  useEffect(() => {
+    const controls = controlsRef.current;
+    const view = getCity3DSelectionView(selectedPlace, Math.max(projection.width, projection.height));
+    if (!controls || !view) return;
+    // ai coding：3D 列表选中使用稳定 target/distance，并继续经既有边界约束校正 target 与 camera。
+    const direction = camera.position.clone().sub(controls.target);
+    if (!direction.lengthSq()) direction.set(1, 1, 1);
+    const distance = Math.min(cameraConfig.maxDistance, Math.max(cameraConfig.minDistance, view.distance));
+    controls.target.set(...view.target);
+    camera.position.copy(controls.target).add(direction.normalize().multiplyScalar(distance));
+    applyCity3DPanBounds(controls, panBounds);
+    controls.update();
+  }, [camera, cameraConfig, panBounds, projection.height, projection.width, selectedPlace]);
   // 仅在越界时同步平移 target 与 camera；默认 target 已是原点，不传易在重渲染时重置的数组 prop。
   useFrame(enforceBounds);
   return <MapControls ref={controlsRef} makeDefault enableDamping dampingFactor={0.08} maxPolarAngle={Math.PI / 2.08} minDistance={cameraConfig.minDistance} maxDistance={cameraConfig.maxDistance} onChange={enforceBounds} />;
 }
 
-function CityScene({ projection, roadPaths, buildings, userPlaces, hover, setHover, containerRef, onSelect, visualMode }) {
+function CityScene({ projection, roadPaths, buildings, userPlaces, selectedId, hover, setHover, containerRef, onSelect, visualMode }) {
   const extent = Math.max(projection.width, projection.height);
-  const cameraConfig = getCity3DCameraConfig(extent);
+  const cameraConfig = useMemo(() => getCity3DCameraConfig(extent), [extent]);
   const capabilities = getVisualModeCapabilities(visualMode);
   const cyber = capabilities.cyberEffects;
   return (
@@ -325,12 +340,12 @@ function CityScene({ projection, roadPaths, buildings, userPlaces, hover, setHov
       {capabilities.showBaseRoads && <RoadMeshes paths={roadPaths} setHover={setHover} containerRef={containerRef} />}
       {capabilities.showProceduralBuildings && <ProceduralBuildings buildings={buildings} setHover={setHover} containerRef={containerRef} cyberEffects={cyber} />}
       <UserPlaces places={userPlaces} hover={hover} setHover={setHover} containerRef={containerRef} onSelect={onSelect} cyberEffects={cyber} />
-      <BoundedMapControls projection={projection} cameraConfig={cameraConfig} />
+      <BoundedMapControls projection={projection} cameraConfig={cameraConfig} selectedPlace={userPlaces.find((place) => place.id === selectedId)} />
     </>
   );
 }
 
-export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, places, onRoadStatus, onSelect, onFallbackTo2D, readOnly = false, visualMode = "normal" }) {
+export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, places, selectedId, onRoadStatus, onSelect, onFallbackTo2D, readOnly = false, visualMode = "normal" }) {
   const [loadState, setLoadState] = useState({ loading: true, error: "", data: null });
   const [retry, setRetry] = useState(0);
   const projection = useMemo(() => createLocalProjection(bounds), [bounds]);
@@ -392,7 +407,7 @@ export default function City3DView({ mapId, mapName, bounds, baseRoadsPath, plac
         camera={{ position: [extent * 0.52, extent * 0.58, extent * 0.52], fov: 42, near: 0.1, far: extent * 5 }}
         gl={{ antialias: true, powerPreference: "high-performance" }}
       >
-        <CityScene projection={projection} roadPaths={loadState.data} buildings={buildings} userPlaces={userPlaces} hover={hover} setHover={setHover} containerRef={containerRef} onSelect={onSelect} visualMode={visualMode} />
+        <CityScene projection={projection} roadPaths={loadState.data} buildings={buildings} userPlaces={userPlaces} selectedId={selectedId} hover={hover} setHover={setHover} containerRef={containerRef} onSelect={onSelect} visualMode={visualMode} />
       </Canvas>
       <div className="city3d-guide" aria-hidden="true">左键拖拽平移 · 右键拖拽调整视角 · 滚轮缩放</div>
       {hover && <div className="city3d-tooltip" role="tooltip" style={{ left: hover.position.x, top: hover.position.y }}><span>{hover.type}</span><strong>{hover.name}</strong></div>}

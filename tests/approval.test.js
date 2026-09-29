@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import React from "react";
+import TestRenderer from "react-test-renderer";
+import ApprovalGate from "../src/components/ApprovalGate.jsx";
 import { completeApprovalOperation, fetchApprovalProfiles, resolveAppRoute, resolveManagementAccess, toApprovalUiText, updateApprovalStatus } from "../src/services/approval.js";
 import { captureOwnerGeneration, createOwnerGeneration, invalidateOwnerGeneration, updateOwnerGeneration } from "../src/services/ownerGeneration.js";
 
@@ -82,4 +85,25 @@ test("admin refresh and review buttons do not forward click events to operations
   assert.match(adminPanel, /onClick=\{\(\) => update\(profile, "approved"\)\}/);
   assert.match(adminPanel, /onClick=\{\(\) => update\(profile, "rejected"\)\}/);
   assert.match(approvalGate, /onClick=\{\(\) => auth\.refreshApproval\(\)\}/);
+});
+
+test("all approval gate states render a full-viewport absolutely centered main", () => {
+  // ai coding：渲染各审核状态后检查真实元素 class，避免源码正则把未生效或旁路布局误判为通过。
+  for (const state of ["pending", "rejected", "unavailable", "loading"]) {
+    const renderer = TestRenderer.create(React.createElement(ApprovalGate, {
+      auth: {
+        access: { state, loading: state === "loading", ownerId: "user-a", error: "网络错误" },
+        session: { user: { id: "user-a" } },
+        status: { loading: false },
+        refreshApproval() {},
+        signOut: async () => {},
+      },
+    }));
+    const page = renderer.root.findAllByType("div")[0];
+    const main = renderer.root.findByType("main");
+    assert.ok(page.props.className.split(" ").includes("approval-page"));
+    for (const className of ["relative", "min-h-screen", "min-h-[100dvh]"]) assert.ok(page.props.className.split(" ").includes(className));
+    for (const className of ["absolute", "inset-0", "flex", "items-center", "justify-center"]) assert.ok(main.props.className.split(" ").includes(className));
+    renderer.unmount();
+  }
 });

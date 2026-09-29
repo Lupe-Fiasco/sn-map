@@ -1,3 +1,4 @@
+import React from "react";
 import { toApprovalUiText } from "../services/approval.js";
 import { ui } from "../uiClassNames.js";
 
@@ -6,12 +7,12 @@ export default function ApprovalGate({ auth }) {
     const loading = auth.access.loading || auth.access.ownerId !== auth.session?.user?.id;
     const rejected = state === "rejected";
     return (
-        <div className="min-h-screen bg-[#f6f7f2] text-[#19332e] cyber:bg-[#070b18] cyber:text-[#e6fbff] minimal:bg-[#fafafa]">
-            <header className="mx-auto flex w-[min(1440px,calc(100%_-_48px))] items-center justify-between gap-6 pb-6 pt-[38px]">
+        <div className="approval-page relative flex min-h-screen min-h-[100dvh] flex-col bg-[#f6f7f2] text-[#19332e] cyber:bg-[#070b18] cyber:text-[#e6fbff] minimal:bg-[#fafafa]">
+            <header className="relative z-10 mx-auto flex w-[min(1440px,calc(100%_-_48px))] items-center justify-between gap-6 pb-6 pt-[38px]">
                 <div><p className={ui.eyebrow}>SN MAP / 账号审核</p><h1 className="text-[clamp(1.65rem,3vw,2.35rem)] font-bold tracking-[-.035em]">睢宁地图数据</h1></div>
             </header>
-            <main className="mx-auto grid min-h-[520px] w-[min(1440px,calc(100%_-_48px))] place-items-start justify-center pt-[72px]">
-                {/* ai coding：门禁状态使用主题 utility，加载、拒绝与不可用语义仍由原状态机驱动。 */}
+            {/* ai coding：主体脱离 Header/Footer 文档流，以全视口为基准严格居中；对称留白避免卡片遮挡首尾内容。 */}
+            <main className="absolute inset-0 flex items-center justify-center overflow-y-auto px-6 py-[140px]">
                 <section className={`${ui.card} w-[min(560px,100%)] p-[34px] text-center`} aria-labelledby="approval-title">
                     <span className={`mx-auto mb-[18px] grid h-[52px] w-[52px] place-items-center rounded-full text-xl font-extrabold ${rejected ? "bg-[#ffebe8] text-[#9d352e] cyber:bg-[#381b2a] cyber:text-[#ff9caf]" : "bg-[#fff3dc] text-[#8a5a1c] cyber:bg-[#35291c] cyber:text-[#ffd18a]"}`} aria-hidden="true">{rejected ? "!" : "…"}</span>
                     <p className={ui.eyebrow}>正式账号访问</p>
@@ -23,7 +24,7 @@ export default function ApprovalGate({ auth }) {
                     </div>
                 </section>
             </main>
-            <footer><span>SN MAP · React 地图</span><span>账号权限由数据库审核策略保护</span></footer>
+            <footer className="relative z-10 mt-auto"><span>SN MAP · React 地图</span><span>账号权限由数据库审核策略保护</span></footer>
         </div>
     );
 }

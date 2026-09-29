@@ -26,13 +26,15 @@ export function createPublicMapViewProps(data, selectedId, onSelect, onRoadStatu
     };
 }
 
-export function createPublicCity3DViewProps(data, onSelect, onRoadStatus, visualMode, onFallbackTo2D) {
+export function createPublicCity3DViewProps(data, selectedId, onSelect, onRoadStatus, visualMode, onFallbackTo2D) {
     return {
         mapId: data.map.id,
         mapName: data.map.name,
         bounds: data.viewConfig.bounds,
         baseRoadsPath: data.viewConfig.baseRoadsPath,
         places: data.row.snapshot,
+        // ai coding：公开列表选中状态只传给只读 3D 视图，用于复用既有相机定位与边界约束。
+        selectedId,
         onSelect,
         onRoadStatus,
         onFallbackTo2D,

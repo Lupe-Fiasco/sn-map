@@ -29,7 +29,7 @@ export default function PublicMapViewport({ data, selectedId, onSelect, onRoadSt
                 onRetry={() => setCity3DImportIndex((index) => index + 1)}
             >
                 <Suspense fallback={<div className="city3d-message" role="status">正在加载 3D 渲染器…</div>}>
-                    <ThreeDimensionalView {...createPublicCity3DViewProps(data, onSelect, onRoadStatus, visualMode, () => setViewMode("2d"))} />
+                    <ThreeDimensionalView {...createPublicCity3DViewProps(data, selectedId, onSelect, onRoadStatus, visualMode, () => setViewMode("2d"))} />
                 </Suspense>
             </City3DErrorBoundary>
         )}

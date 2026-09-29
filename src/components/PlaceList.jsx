@@ -1,5 +1,6 @@
-import TypeSelect from "./TypeSelect.jsx";
+import TypeMultiSelect from "./TypeMultiSelect.jsx";
 import { ui } from "../uiClassNames.js";
+import { filterPlaces } from "../services/placeFiltering.js";
 
 export default function PlaceList({
     places,
@@ -11,17 +12,7 @@ export default function PlaceList({
     onTypeFilter,
     onSelect,
 }) {
-    const matches = places.features.filter(({ properties }) => {
-        const haystack =
-            `${properties.name} ${properties.address || ""}`.toLocaleLowerCase(
-                "zh-CN",
-            );
-        return (
-            (!typeFilter || properties.type === typeFilter) &&
-            (!query.trim() ||
-                haystack.includes(query.trim().toLocaleLowerCase("zh-CN")))
-        );
-    });
+    const matches = filterPlaces(places.features, query, typeFilter);
     const typeFor = (id) =>
         types.find((type) => type.id === id) ?? { name: id, color: "#65736f" };
     return (
@@ -47,11 +38,11 @@ export default function PlaceList({
                 >
                     按类型筛选
                 </label>
-                <TypeSelect
+                {/* ai coding：类型筛选独立使用 checkbox menu；地点表单的单选 TypeSelect 语义保持不变。 */}
+                <TypeMultiSelect
                     id="type-filter"
                     value={typeFilter}
                     options={types.filter((type) => !type.hidden)}
-                    placeholder="全部类型"
                     onChange={onTypeFilter}
                 />
             </div>
